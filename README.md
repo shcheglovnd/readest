@@ -1,3 +1,36 @@
+## Changed in fork
+
+This fork adds a filesystem-backed home library to Readest. Book folders can be
+managed through SMB/Samba while the web/PWA reader serves the existing originals
+over HTTPS, without uploading a second server-side copy of every book.
+
+- **Existing storage:** an optional filesystem service and five small hooks at
+  Readest's object-storage boundary. Covers and auxiliary assets keep their normal
+  object store; authentication, annotations, progress and statistics keep the
+  existing Readest backend.
+- **Folders and independent files:** a periodic indexer mirrors directories into
+  native nested Groups. Each physical file gets its own entry, including identical
+  copies and PDFs with different embedded notes. Established IDs survive recognized
+  renames; originals are not rewritten. Configurable roots and exclusions limit
+  what appears in the reader.
+- **Safe uploads and deletion:** uploads finish atomically in a storage inbox.
+  Bookshelf deletion leaves originals on disk, and scans respect deleted entries.
+  An explicit restore command re-adds an entry while retaining its reading history.
+- **Offline PWA:** Docker uses the existing Serwist webpack integration, caches
+  startup pages/configuration/WASM, and retains the local login offline. Download
+  books online before reading offline.
+- **Android PWA presentation:** request fullscreen, recognize fullscreen PWA
+  routing, and provide app icons with correct dimensions. Browser support still
+  determines fullscreen behavior; settings remain per browser.
+
+See [filesystem library setup, configuration and tests](docker/local-library/README.md).
+The `homelab` branch starts from upstream Readest 0.12.20 at
+`5a105f4e73b2c15d865c79f3277f9e3ef5b4b32f`. Runtime credentials, personal books,
+catalogs, backups and machine-specific deployment state are not part of the fork.
+The original upstream README follows.
+
+---
+
 <div align="center">
   <a href="https://readest.com?utm_source=github&utm_medium=referral&utm_campaign=readme" target="_blank">
     <img src="https://github.com/readest/readest/blob/main/apps/readest-app/src-tauri/icons/icon.png?raw=true" alt="Readest Logo" width="20%" />
