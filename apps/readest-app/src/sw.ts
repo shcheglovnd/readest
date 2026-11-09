@@ -9,6 +9,23 @@ declare global {
 
 declare const self: ServiceWorkerGlobalScope;
 
+
+// SPA navigation does not necessarily make a document request. Seed the
+// startup shells and public runtime config while installing the worker.
+// Runtime config stays NetworkFirst so online server changes still take effect.
+self.addEventListener('install', (event) => {
+  event.waitUntil((async () => {
+    const pages = await caches.open('client-pages');
+    const resources = await caches.open('offline-cache');
+    await Promise.all([
+      pages.add('/library'),
+      pages.add('/reader'),
+      resources.add('/'),
+      resources.add('/runtime-config.js'),
+    ]);
+  })());
+});
+
 const serwist = new Serwist({
   precacheEntries: self.__SW_MANIFEST,
   skipWaiting: true,
@@ -37,6 +54,7 @@ const serwist = new Serwist({
         networkTimeoutSeconds: 3,
         matchOptions: {
           ignoreSearch: true,
+          ignoreVary: true,
         },
         plugins: [
           new ExpirationPlugin({

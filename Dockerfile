@@ -49,7 +49,17 @@ WORKDIR /app/apps/readest-app
 # next.config.mjs gates `output: 'standalone'` on BUILD_STANDALONE so other
 # web builds keep their default output.
 ENV BUILD_STANDALONE=true
-RUN pnpm build-web
+ENV NODE_OPTIONS="--max-old-space-size=6144"
+# Serwist's webpack plugin emits the PWA worker; Turbopack omits it.
+# Dependencies were installed from the frozen lockfile above. Avoid pnpm's
+# run-time dependency refresh against a store that is only mounted in that stage.
+RUN pnpm --config.verify-deps-before-run=never build-web --webpack && test -s public/sw.js
+RUN pnpm --config.verify-deps-before-run=never exec tsc --noEmit && pnpm --config.verify-deps-before-run=never exec biome lint --vcs-enabled=false .
+RUN pnpm --config.verify-deps-before-run=never test --run src/__tests__/utils/local-library.test.ts src/__tests__/services/environment.test.ts src/__tests__/utils/nav.test.ts src/__tests__/app/auth/auth-page-safe-area.test.tsx
+
+# Optional verification target, sharing the production build cache.
+FROM build AS unit-tests
+RUN pnpm --config.verify-deps-before-run=never test --run --maxWorkers=2
 
 # Production runtime ships only the standalone server, its traced node_modules,
 # and the static/public assets — no pnpm, no source tree, no dev dependencies,

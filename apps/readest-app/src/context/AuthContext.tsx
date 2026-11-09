@@ -60,6 +60,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     };
     const refreshSession = async () => {
+      if (!navigator.onLine) return;
       try {
         await supabase.auth.refreshSession();
       } catch {
@@ -67,7 +68,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     };
 
-    const { data: subscription } = supabase.auth.onAuthStateChange((_, session) => {
+    const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'INITIAL_SESSION' && !session && !navigator.onLine) return;
       syncSession(session);
     });
 

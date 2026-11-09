@@ -187,6 +187,7 @@ const withPWA = pwaDisabled
   : withSerwistInit({
       swSrc: 'src/sw.ts',
       swDest: 'public/sw.js',
+      maximumFileSizeToCacheInBytes: 16 * 1024 * 1024,
       cacheOnNavigation: true,
       reloadOnOnline: true,
       disable: false,

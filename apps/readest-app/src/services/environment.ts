@@ -12,7 +12,9 @@ declare global {
 export const isTauriAppPlatform = () => process.env['NEXT_PUBLIC_APP_PLATFORM'] === 'tauri';
 export const isWebAppPlatform = () => process.env['NEXT_PUBLIC_APP_PLATFORM'] === 'web';
 export const hasCli = () => window.__READEST_CLI_ACCESS === true;
-export const isPWA = () => window.matchMedia('(display-mode: standalone)').matches;
+export const isPWA = () =>
+  window.matchMedia('(display-mode: standalone)').matches ||
+  window.matchMedia('(display-mode: fullscreen)').matches;
 export const getBaseUrl = () =>
   getRuntimeConfig()?.apiBaseUrl ??
   process.env['API_BASE_URL'] ??

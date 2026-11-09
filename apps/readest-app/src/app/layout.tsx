@@ -1,6 +1,5 @@
 import * as React from 'react';
 import type { Metadata, Viewport } from 'next';
-import Script from 'next/script';
 import { ViewTransitions } from '@/components/ViewTransitions';
 import { EnvProvider } from '@/context/EnvContext';
 import Providers from '@/components/Providers';
@@ -33,8 +32,11 @@ export const metadata: Metadata = {
     },
   ],
   icons: {
-    icon: [{ url: '/icon.png' }, { url: '/favicon.ico' }],
-    apple: [{ url: '/apple-touch-icon.png', sizes: '180x180' }],
+    icon: [
+      { url: '/icons/readest-192-v1.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icons/readest-512-v1.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: [{ url: '/icons/readest-180-v1.png', sizes: '180x180' }],
   },
   appleWebApp: {
     capable: true,
@@ -140,7 +142,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       <head>
         {shouldInjectRuntimeConfig ? (
-          <Script src='/runtime-config.js' strategy='beforeInteractive' />
+          <script src='/runtime-config.js' />
         ) : null}
         {shouldInjectDevHmrPatch ? (
           <script dangerouslySetInnerHTML={{ __html: devHmrPatchScript }} />
