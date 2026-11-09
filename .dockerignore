@@ -24,6 +24,11 @@ out
 docker/.env
 .env*.local
 **/.env*.local
+**/local-library/.env
+**/local-library/roots.json
+**/local-library/.venv
+**/__pycache__
+**/*.sqlite*
 
 # Local credentials and tooling state
 *.pem

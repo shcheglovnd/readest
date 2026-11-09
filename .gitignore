@@ -62,3 +62,9 @@ apps/readest.koplugin/native/localsend-bin/target/
 
 # scripts/tauri.mjs parks the wry Cargo.lock here during a Linux CEF build
 /Cargo.lock.wry
+
+# Local library operator state and credentials
+/docker/local-library/.env
+/docker/local-library/roots.json
+/docker/local-library/.venv/
+/docker/local-library/__pycache__/

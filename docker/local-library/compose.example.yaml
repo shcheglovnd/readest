@@ -1,0 +1,57 @@
+# Merge with docker/compose.yaml. Paths are relative to that first Compose file.
+services:
+  client:
+    image: local/readest:homelab
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    environment:
+      LOCAL_LIBRARY_URL: http://library:8080
+      LOCAL_LIBRARY_SECRET: ${LOCAL_LIBRARY_SECRET:?Set a random adapter secret}
+    depends_on:
+      - library
+
+  library:
+    build:
+      context: ./local-library
+    restart: unless-stopped
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    pids_limit: 128
+    environment:
+      LOCAL_LIBRARY_SECRET: ${LOCAL_LIBRARY_SECRET:?Set a random adapter secret}
+      LIBRARY_ORIGIN: ${SITE_URL:?Set the public Readest origin}
+      LIBRARY_DATABASE: /state/catalog.sqlite
+      LIBRARY_OWNER: ${LIBRARY_OWNER:?Set the Readest account UUID}
+      LIBRARY_ROOTS: '["${LIBRARY_STORAGE_ROOT}/books","${LIBRARY_STORAGE_ROOT}/education","${LIBRARY_STORAGE_ROOT}/media/books"]'
+      LIBRARY_EXCLUDED: '["${LIBRARY_STORAGE_ROOT}/education/private"]'
+      LIBRARY_INBOX: ${LIBRARY_STORAGE_ROOT}/books/Readest Inbox
+    volumes:
+      - type: bind
+        source: ${READEST_STATE_DIR:?Set the indexer state directory}/data/library
+        target: /state
+        bind: {create_host_path: false}
+      # Keep absolute paths identical to those used by the host-side indexer.
+      - type: bind
+        source: ${LIBRARY_STORAGE_ROOT:?Set the storage mount}/books
+        target: ${LIBRARY_STORAGE_ROOT}/books
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${LIBRARY_STORAGE_ROOT}/education
+        target: ${LIBRARY_STORAGE_ROOT}/education
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${LIBRARY_STORAGE_ROOT}/media/books
+        target: ${LIBRARY_STORAGE_ROOT}/media/books
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${LIBRARY_STORAGE_ROOT}/books/Readest Inbox
+        target: ${LIBRARY_STORAGE_ROOT}/books/Readest Inbox
+        bind: {create_host_path: false}
+    # No published port: only the application and public transfer proxy use it.

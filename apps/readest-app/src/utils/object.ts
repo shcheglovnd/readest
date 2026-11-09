@@ -1,3 +1,4 @@
+import { localLibraryObject } from './localLibrary';
 import { s3Storage } from './s3';
 import { r2Storage } from './r2';
 import { getStorageType } from './storage';
@@ -39,6 +40,13 @@ export const getDownloadSignedUrl = async (
   expiresIn: number,
   bucketName?: string,
 ) => {
+  const local = await localLibraryObject<{ url: string }>(
+    'download',
+    fileKey,
+    { expiresIn },
+    bucketName,
+  );
+  if (local) return local.url;
   const storageType = getStorageType();
   if (storageType === 'r2') {
     bucketName = bucketName || process.env['R2_BUCKET_NAME'] || '';
@@ -55,6 +63,13 @@ export const getUploadSignedUrl = async (
   expiresIn: number,
   bucketName?: string,
 ) => {
+  const local = await localLibraryObject<{ url: string }>(
+    'upload',
+    fileKey,
+    { contentLength, expiresIn },
+    bucketName,
+  );
+  if (local) return local.url;
   const storageType = getStorageType();
   if (storageType === 'r2') {
     bucketName = bucketName || process.env['R2_BUCKET_NAME'] || '';
@@ -82,6 +97,8 @@ export const putObject = async (
 };
 
 export const deleteObject = async (fileKey: string, bucketName?: string) => {
+  const local = await localLibraryObject<{ ok: boolean }>('delete', fileKey, {}, bucketName);
+  if (local) return;
   const storageType = getStorageType();
   if (storageType === 'r2') {
     bucketName = bucketName || process.env['R2_BUCKET_NAME'] || '';
@@ -95,6 +112,8 @@ export const deleteObject = async (fileKey: string, bucketName?: string) => {
 // Returns true if the object exists in storage. Used to verify uploads completed
 // before treating a `files` row as shareable.
 export const objectExists = async (fileKey: string, bucketName?: string): Promise<boolean> => {
+  const local = await localLibraryObject<{ exists: boolean }>('exists', fileKey, {}, bucketName);
+  if (local) return local.exists;
   const storageType = getStorageType();
   try {
     if (storageType === 'r2') {
@@ -118,6 +137,13 @@ export const copyObject = async (
   destFileKey: string,
   bucketName?: string,
 ) => {
+  const local = await localLibraryObject<{ ok: boolean }>(
+    'copy',
+    sourceFileKey,
+    { destFileKey },
+    bucketName,
+  );
+  if (local) return;
   const storageType = getStorageType();
   if (storageType === 'r2') {
     bucketName = bucketName || process.env['R2_BUCKET_NAME'] || '';

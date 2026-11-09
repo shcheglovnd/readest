@@ -1,0 +1,11 @@
+{
+  "group_base": "/srv/library",
+  "mount_point": "/srv/library",
+  "roots": [
+    "/srv/library/books",
+    "/srv/library/education",
+    "/srv/library/media/books"
+  ],
+  "excluded": ["/srv/library/education/private"],
+  "inbox": "/srv/library/books/Readest Inbox"
+}
