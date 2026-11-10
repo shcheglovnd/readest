@@ -7,6 +7,8 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { ProviderLogin, type OAuthProvider } from './ProviderLogin';
 import EmailPasswordAuth from './EmailPasswordAuth';
 import ReadestCloudOptIn from './ReadestCloudOptIn';
+import NativeServerSettings from './NativeServerSettings';
+import { readNativeServerConfig } from '@/services/nativeServerConfig';
 
 interface AuthPanelProps {
   supabaseClient: SupabaseClient;
@@ -22,6 +24,8 @@ export default function AuthPanel({
   onProviderSignIn,
 }: AuthPanelProps) {
   const _ = useTranslation();
+  const nativeServer =
+    process.env['NEXT_PUBLIC_APP_PLATFORM'] === 'tauri' ? readNativeServerConfig() : undefined;
   // `signInWithOAuth` redirects the whole page on web, which can cut off the
   // opt-in's settings write. Hold sign-in until it has landed. Null until the
   // user actually touches the checkbox, so the common path adds no delay.
@@ -42,6 +46,7 @@ export default function AuthPanel({
           </p>
         </div>
       </div>
+      <NativeServerSettings supabaseClient={supabaseClient} />
       <div className='flex w-full flex-col gap-2.5'>
         <ProviderLogin
           provider='google'
@@ -79,6 +84,7 @@ export default function AuthPanel({
         magicLink={magicLink}
       />
       <ReadestCloudOptIn
+        serverName={nativeServer ? new URL(nativeServer.apiBaseUrl).host : undefined}
         onPendingWrite={(write) => {
           pendingCloudChoice.current = write;
         }}

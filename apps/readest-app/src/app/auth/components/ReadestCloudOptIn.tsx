@@ -28,6 +28,7 @@ import { hasAnyThirdPartyEnabled, isReadestCloudEnabled } from '@/services/sync/
  * on mount; this guard keeps the wrong state off the screen until it does.
  */
 interface ReadestCloudOptInProps {
+  serverName?: string;
   /**
    * Reports the in-flight settings write. Web OAuth leaves the page with a full
    * redirect, so the sign-in handlers await this before navigating: a torn-off
@@ -37,7 +38,7 @@ interface ReadestCloudOptInProps {
   onPendingWrite?: (write: Promise<unknown>) => void;
 }
 
-export default function ReadestCloudOptIn({ onPendingWrite }: ReadestCloudOptInProps) {
+export default function ReadestCloudOptIn({ onPendingWrite, serverName }: ReadestCloudOptInProps) {
   const _ = useTranslation();
   const { envConfig } = useEnv();
   const settings = useSettingsStore((state) => state.settings);
@@ -74,7 +75,11 @@ export default function ReadestCloudOptIn({ onPendingWrite }: ReadestCloudOptInP
           className='checkbox checkbox-sm mt-0.5 shrink-0'
         />
         <span className='flex flex-col gap-1'>
-          <span className='text-sm'>{_('Sync with Readest Cloud')}</span>
+          <span className='text-sm'>
+            {serverName
+              ? _('Sync with {{server}}', { server: serverName })
+              : _('Sync with Readest Cloud')}
+          </span>
           <span className='text-base-content/60 text-xs leading-relaxed'>
             {_(
               'Store your library, reading progress, and highlights in your Readest account. You can change this any time in Settings.',

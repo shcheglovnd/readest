@@ -1,3 +1,5 @@
+import { initializeNativeServerConfig } from './nativeServerConfig';
+
 export interface ReadestRuntimeConfig {
   supabaseUrl?: string;
   supabaseAnonKey?: string;
@@ -15,8 +17,20 @@ declare global {
   }
 }
 
-export const getRuntimeConfig = () =>
-  typeof window === 'undefined' ? undefined : window.__READEST_RUNTIME_CONFIG;
+let nativeConfigLoaded = false;
+let nativeConfig: ReadestRuntimeConfig | undefined;
+
+export const getRuntimeConfig = () => {
+  if (typeof window === 'undefined') return undefined;
+  if (process.env['NEXT_PUBLIC_APP_PLATFORM'] === 'tauri') {
+    if (!nativeConfigLoaded) {
+      nativeConfig = initializeNativeServerConfig();
+      nativeConfigLoaded = true;
+    }
+    if (nativeConfig) return nativeConfig;
+  }
+  return window.__READEST_RUNTIME_CONFIG;
+};
 
 export const getServerRuntimeConfig = (): ReadestRuntimeConfig => ({
   // Browser runtime config should prefer a public Supabase URL when provided.

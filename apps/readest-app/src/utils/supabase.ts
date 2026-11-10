@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { getRuntimeConfig } from '@/services/runtimeConfig';
+import { nativeServerSessionKey, readNativeServerConfig } from '@/services/nativeServerConfig';
 
 const supabaseUrl =
   getRuntimeConfig()?.supabaseUrl ||
@@ -27,6 +28,10 @@ const READEST_CLOUD_HOSTS = [
 // callbacks land there, and a proxy can't change that.
 const AUTH_PROXY_URL = 'https://auth-cf.readest.com';
 
+const nativeServer =
+  process.env['NEXT_PUBLIC_APP_PLATFORM'] === 'tauri' ? readNativeServerConfig() : undefined;
+const nativeAuth = nativeServer ? { storageKey: nativeServerSessionKey(nativeServer) } : undefined;
+
 const isProxiedAuthRequest = ({ pathname, searchParams }: URL) =>
   pathname === '/auth/v1/logout' ||
   (pathname === '/auth/v1/token' &&
@@ -42,13 +47,16 @@ const proxyAuthFetch: typeof fetch = (input, init) => {
 export const supabase = createClient(
   supabaseUrl,
   supabaseAnonKey,
-  READEST_CLOUD_HOSTS.includes(new URL(supabaseUrl).hostname)
-    ? { auth: { storageKey: 'sb-readest-auth-token' }, global: { fetch: proxyAuthFetch } }
-    : undefined,
+  nativeAuth
+    ? { auth: nativeAuth }
+    : READEST_CLOUD_HOSTS.includes(new URL(supabaseUrl).hostname)
+      ? { auth: { storageKey: 'sb-readest-auth-token' }, global: { fetch: proxyAuthFetch } }
+      : undefined,
 );
 
 export const createSupabaseClient = (accessToken?: string) => {
   return createClient(supabaseUrl, supabaseAnonKey, {
+    ...(nativeAuth ? { auth: nativeAuth } : {}),
     global: {
       headers: accessToken
         ? {

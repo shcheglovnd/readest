@@ -22,8 +22,14 @@ over HTTPS, without uploading a second server-side copy of every book.
 - **Android PWA presentation:** request fullscreen, recognize fullscreen PWA
   routing, and provide app icons with correct dimensions. Browser support still
   determines fullscreen behavior; settings remain per browser.
+- **Native custom servers:** choose a Readest server on the Android
+  sign-in screen. Public configuration is discovered automatically, with manual
+  setup for older deployments. Server selection persists across restarts and
+  resets local login sessions; full server URLs isolate authentication storage.
+  Standard certificate verification is retained.
 
 See [filesystem library setup, configuration and tests](docker/local-library/README.md).
+See [native custom-server setup and volume-key behavior](apps/readest-app/docs/native-custom-server.md).
 The `homelab` branch starts from upstream Readest 0.12.20 at
 `5a105f4e73b2c15d865c79f3277f9e3ef5b4b32f`. Runtime credentials, personal books,
 catalogs, backups and machine-specific deployment state are not part of the fork.
