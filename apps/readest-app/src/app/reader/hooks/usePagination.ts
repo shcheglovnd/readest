@@ -8,6 +8,7 @@ import { useDeviceControlStore } from '@/store/deviceStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useSidebarStore } from '@/store/sidebarStore';
 import { eventDispatcher } from '@/utils/event';
+import { normalizeVolumeScrollStep } from '@/utils/volumeScroll';
 import {
   resolvePageTurn,
   normalizeDomKeyEvent,
@@ -466,6 +467,25 @@ export const usePagination = (
       ) {
         const { keyName } = msg.detail;
         setHoveredBookKey('');
+        const view = viewRef.current;
+        if (
+          (keyName === 'VolumeUp' || keyName === 'VolumeDown') &&
+          viewSettings.volumeKeysMode === 'scroll' &&
+          view?.renderer.scrolled
+        ) {
+          // Use the renderer's reading-axis viewport, including PDF zoom and
+          // horizontal/vertical layouts. Its navigation handles book/section
+          // boundaries and progress updates. Full-page line snapping, overlap,
+          // paragraph mode and the ruler must not replace an explicit step.
+          const size = view.renderer.size;
+          if (!Number.isFinite(size) || size <= 0) return;
+          const distance = Math.max(
+            1,
+            (size * normalizeVolumeScrollStep(viewSettings.volumeKeysScrollStep)) / 100,
+          );
+          await (keyName === 'VolumeUp' ? view.prev(distance) : view.next(distance));
+          return;
+        }
         if (
           viewSettings.paragraphMode?.enabled &&
           (keyName === 'VolumeUp' || keyName === 'VolumeDown')

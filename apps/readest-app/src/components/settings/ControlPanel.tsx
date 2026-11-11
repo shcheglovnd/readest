@@ -643,6 +643,7 @@ const ControlPanel: React.FC<SettingsPanelPanelProp> = ({ bookKey, onRegisterRes
 
       <PageTurnerSettings
         bookKey={bookKey}
+        onEnableScrolledMode={() => setScrolledMode(true)}
         onRegisterReset={(fn) => {
           pageTurnerResetRef.current = fn;
         }}

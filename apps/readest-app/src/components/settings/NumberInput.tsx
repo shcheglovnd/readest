@@ -8,6 +8,7 @@ interface NumberInputProps {
   className?: string;
   inputClassName?: string;
   label: string;
+  ariaLabel?: string;
   iconSize?: number;
   value: number;
   min: number;
@@ -22,6 +23,7 @@ const NumberInput: React.FC<NumberInputProps> = ({
   className,
   inputClassName,
   label,
+  ariaLabel,
   iconSize,
   value,
   onChange,
@@ -75,6 +77,7 @@ const NumberInput: React.FC<NumberInputProps> = ({
         <form onSubmit={handleSubmit}>
           <input
             type='text'
+            aria-label={ariaLabel}
             inputMode='decimal'
             disabled={disabled}
             value={displayValue}

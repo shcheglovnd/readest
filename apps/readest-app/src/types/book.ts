@@ -301,6 +301,9 @@ export interface BookLayout {
      long press in fixed-layout books and tap in the others. */
   imageViewerGesture?: ImageViewerGesture;
   volumeKeysToFlip: boolean;
+  volumeKeysMode?: 'page' | 'scroll';
+  // Percentage of the visible reading area per volume-key press in scroll mode.
+  volumeKeysScrollStep?: number;
   maxColumnCount: number;
   maxInlineSize: number;
   maxBlockSize: number;

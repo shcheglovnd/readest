@@ -3015,5 +3015,8 @@
   "The certificate store exceeds 64 KiB.": "Хранилище сертификатов превышает 64 КиБ.",
   "Could not read certificates.": "Не удалось прочитать сертификаты.",
   "Could not save certificates.": "Не удалось сохранить сертификаты.",
-  "Could not read the certificate file.": "Не удалось прочитать файл сертификата."
+  "Could not read the certificate file.": "Не удалось прочитать файл сертификата.",
+  "Volume key action": "Действие кнопок громкости",
+  "Scroll step (%)": "Шаг прокрутки (%)",
+  "Scroll moves by this percentage of the visible reading area. Selecting Scroll enables Scrolled Mode.": "Прокрутка сдвигает содержимое на указанный процент видимой области. Этот режим включает непрерывную прокрутку."
 }

@@ -7,6 +7,7 @@ import { saveSysSettings, saveViewSettings } from '@/helpers/settings';
 import { useResetViewSettings } from '@/hooks/useResetSettings';
 import { eventDispatcher } from '@/utils/event';
 import { useEinkRefreshSupported } from '@/hooks/useEinkRefreshSupported';
+import { normalizeVolumeScrollStep } from '@/utils/volumeScroll';
 import {
   normalizeNativeKey,
   normalizeDomKeyEvent,
@@ -17,7 +18,8 @@ import {
   PageTurnAction,
 } from '@/utils/keybinding';
 import { HardwarePageTurnerSettings, KeyBinding } from '@/types/settings';
-import { BoxedList, SettingsRow, SettingsSwitchRow } from './primitives';
+import { BoxedList, SettingsRow, SettingsSelect, SettingsSwitchRow } from './primitives';
+import NumberInput from './NumberInput';
 import { useReaderStore } from '@/store/readerStore';
 
 type Slot = PageTurnAction;
@@ -26,9 +28,14 @@ const LEARN_TIMEOUT_MS = 8000;
 interface PageTurnerSettingsProps {
   bookKey: string;
   onRegisterReset?: (resetFn: () => void) => void;
+  onEnableScrolledMode?: () => void;
 }
 
-const PageTurnerSettings: React.FC<PageTurnerSettingsProps> = ({ bookKey, onRegisterReset }) => {
+const PageTurnerSettings: React.FC<PageTurnerSettingsProps> = ({
+  bookKey,
+  onRegisterReset,
+  onEnableScrolledMode,
+}) => {
   const _ = useTranslation();
   const { envConfig, appService } = useEnv();
   const { getViewSettings } = useReaderStore();
@@ -38,6 +45,12 @@ const PageTurnerSettings: React.FC<PageTurnerSettingsProps> = ({ bookKey, onRegi
   const resetToDefaults = useResetViewSettings();
 
   const [volumeKeysToFlip, setVolumeKeysToFlip] = useState(viewSettings.volumeKeysToFlip);
+  const [volumeKeysMode, setVolumeKeysMode] = useState<'page' | 'scroll'>(
+    viewSettings.volumeKeysMode ?? 'page',
+  );
+  const [volumeKeysScrollStep, setVolumeKeysScrollStep] = useState(
+    normalizeVolumeScrollStep(viewSettings.volumeKeysScrollStep),
+  );
   const [config, setConfig] = useState<HardwarePageTurnerSettings>(settings.hardwarePageTurner);
   const configRef = useRef(config);
   configRef.current = config;
@@ -129,7 +142,30 @@ const PageTurnerSettings: React.FC<PageTurnerSettingsProps> = ({ bookKey, onRegi
   }, [volumeKeysToFlip]);
 
   useEffect(() => {
-    onRegisterReset?.(() => resetToDefaults({ volumeKeysToFlip: setVolumeKeysToFlip }));
+    saveViewSettings(envConfig, bookKey, 'volumeKeysMode', volumeKeysMode, false, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [volumeKeysMode]);
+
+  useEffect(() => {
+    saveViewSettings(
+      envConfig,
+      bookKey,
+      'volumeKeysScrollStep',
+      volumeKeysScrollStep,
+      false,
+      false,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [volumeKeysScrollStep]);
+
+  useEffect(() => {
+    onRegisterReset?.(() =>
+      resetToDefaults({
+        volumeKeysToFlip: setVolumeKeysToFlip,
+        volumeKeysMode: setVolumeKeysMode,
+        volumeKeysScrollStep: setVolumeKeysScrollStep,
+      }),
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -192,11 +228,49 @@ const PageTurnerSettings: React.FC<PageTurnerSettingsProps> = ({ bookKey, onRegi
         }
       >
         {appService?.isMobileApp && (
-          <SettingsSwitchRow
-            label={_('Use Volume Keys')}
-            checked={volumeKeysToFlip}
-            onChange={() => setVolumeKeysToFlip(!volumeKeysToFlip)}
-          />
+          <>
+            <SettingsSwitchRow
+              label={_('Use Volume Keys')}
+              checked={volumeKeysToFlip}
+              onChange={() => setVolumeKeysToFlip(!volumeKeysToFlip)}
+            />
+            <SettingsRow label={_('Volume key action')} disabled={!volumeKeysToFlip}>
+              <SettingsSelect
+                ariaLabel={_('Volume key action')}
+                value={volumeKeysMode}
+                disabled={!volumeKeysToFlip}
+                options={[
+                  { value: 'page', label: _('Page') },
+                  { value: 'scroll', label: _('Scroll') },
+                ]}
+                onChange={(event) => {
+                  const mode = event.target.value === 'scroll' ? 'scroll' : 'page';
+                  setVolumeKeysMode(mode);
+                  if (mode === 'scroll') onEnableScrolledMode?.();
+                }}
+              />
+            </SettingsRow>
+            {volumeKeysMode === 'scroll' && (
+              <>
+                <NumberInput
+                  label={_('Scroll step (%)')}
+                  ariaLabel={_('Scroll step (%)')}
+                  value={volumeKeysScrollStep}
+                  onChange={setVolumeKeysScrollStep}
+                  min={1}
+                  max={100}
+                  step={1}
+                  disabled={!volumeKeysToFlip}
+                  data-setting-id='settings.control.volumeScrollStep'
+                />
+                <p className='text-base-content/60 px-4 pb-3 text-xs'>
+                  {_(
+                    'Scroll moves by this percentage of the visible reading area. Selecting Scroll enables Scrolled Mode.',
+                  )}
+                </p>
+              </>
+            )}
+          </>
         )}
         <SettingsSwitchRow
           label={_('Custom Page Turner')}

@@ -76,7 +76,11 @@ vi.mock('@/utils/telemetry', () => ({
 
 // Unrelated to the Scroll section and pulls in the device-control store.
 vi.mock('@/components/settings/PageTurnerSettings', () => ({
-  default: () => null,
+  default: ({ onEnableScrolledMode }: { onEnableScrolledMode?: () => void }) => (
+    <button type='button' onClick={onEnableScrolledMode}>
+      Enable volume scroll mode
+    </button>
+  ),
 }));
 
 vi.mock('@/utils/style', () => ({ getStyles: () => '' }));
@@ -104,6 +108,19 @@ afterEach(() => {
 });
 
 describe('Settings > Behavior > Scroll', () => {
+  it.each([
+    false,
+    true,
+  ])('enables continuous scrolling when the volume controls request it (fixed layout: %s)', (fixed) => {
+    currentIsFixedLayout = fixed;
+    render(<ControlPanel bookKey='test' onRegisterReset={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Enable volume scroll mode' }));
+    expect((scrolledModeSwitch() as HTMLInputElement).checked).toBe(true);
+    expect(saveViewSettings).toHaveBeenCalledWith({}, 'test', 'scrolled', true);
+    expect(stubView.renderer.setAttribute).toHaveBeenCalledWith('flow', 'scrolled');
+    expect(applyPageTurnAttributes).toHaveBeenCalled();
+  });
+
   it('saves the pull-down bookmark preference when toggled', () => {
     render(<ControlPanel bookKey='test' onRegisterReset={() => {}} />);
     const toggle = screen.getByRole('checkbox', { name: 'Pull-Down to Bookmark' });

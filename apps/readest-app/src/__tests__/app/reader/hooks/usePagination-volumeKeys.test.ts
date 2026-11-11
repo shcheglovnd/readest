@@ -75,6 +75,116 @@ const setupWithView = (view: ReturnType<typeof makeView>) => {
   return renderHook(() => usePagination(BOOK_KEY, viewRef, containerRef));
 };
 
+describe('volume-button scroll steps', () => {
+  test.each([
+    'reflowable',
+    'pre-paginated',
+  ])('scrolls %s content by the chosen viewport percentage', async (layout) => {
+    const view = makeView();
+    Object.assign(view.renderer, { scrolled: true, size: 800 });
+    Object.assign(view.book, { rendition: { layout } });
+    h.viewSettings = { volumeKeysToFlip: true, volumeKeysMode: 'scroll', volumeKeysScrollStep: 10 };
+    setupWithView(view);
+    await pressVolumeKey('VolumeDown');
+    await pressVolumeKey('VolumeUp');
+    expect(view.next).toHaveBeenCalledWith(80);
+    expect(view.prev).toHaveBeenCalledWith(80);
+  });
+
+  test('uses the current step and viewport size without reopening the book', async () => {
+    const view = makeView();
+    Object.assign(view.renderer, { scrolled: true, size: 800 });
+    h.viewSettings = { volumeKeysToFlip: true, volumeKeysMode: 'scroll', volumeKeysScrollStep: 25 };
+    setupWithView(view);
+    await pressVolumeKey('VolumeDown');
+    expect(view.next).toHaveBeenLastCalledWith(200);
+    h.viewSettings = { ...h.viewSettings, volumeKeysScrollStep: 5 };
+    Object.assign(view.renderer, { size: 600 });
+    await pressVolumeKey('VolumeDown');
+    expect(view.next).toHaveBeenLastCalledWith(30);
+  });
+
+  test.each([
+    [undefined, 200],
+    [NaN, 200],
+    [Infinity, 200],
+    [-10, 8],
+    [0, 8],
+    [150, 800],
+  ])('normalizes a stored step of %s to a safe distance', async (step, expected) => {
+    const view = makeView();
+    Object.assign(view.renderer, { scrolled: true, size: 800 });
+    h.viewSettings = {
+      volumeKeysToFlip: true,
+      volumeKeysMode: 'scroll',
+      volumeKeysScrollStep: step,
+    };
+    setupWithView(view);
+    await pressVolumeKey('VolumeDown');
+    expect(view.next).toHaveBeenCalledWith(expected);
+  });
+
+  test('explicit scroll mode takes precedence over paragraph and ruler navigation', async () => {
+    const view = makeView();
+    Object.assign(view.renderer, { scrolled: true, size: 800 });
+    h.viewSettings = {
+      volumeKeysToFlip: true,
+      volumeKeysMode: 'scroll',
+      paragraphMode: { enabled: true },
+      readingRulerEnabled: true,
+    };
+    const paragraph = vi.fn();
+    const ruler = vi.fn(() => true);
+    eventDispatcher.on('paragraph-next', paragraph);
+    eventDispatcher.onSync('reading-ruler-move', ruler);
+    try {
+      setupWithView(view);
+      await pressVolumeKey('VolumeDown');
+      expect(view.next).toHaveBeenCalledWith(200);
+      expect(paragraph).not.toHaveBeenCalled();
+      expect(ruler).not.toHaveBeenCalled();
+    } finally {
+      eventDispatcher.off('paragraph-next', paragraph);
+      eventDispatcher.offSync('reading-ruler-move', ruler);
+    }
+  });
+
+  test('keeps ordinary page turning when continuous scrolling is off', async () => {
+    const view = makeView();
+    h.viewSettings = { volumeKeysToFlip: true, volumeKeysMode: 'scroll', volumeKeysScrollStep: 5 };
+    setupWithView(view);
+    await pressVolumeKey('VolumeDown');
+    expect(view.next).toHaveBeenCalledWith();
+  });
+
+  test('does not scroll while TTS plays or reader controls are visible', async () => {
+    const view = makeView();
+    Object.assign(view.renderer, { scrolled: true, size: 800 });
+    h.viewSettings = { volumeKeysToFlip: true, volumeKeysMode: 'scroll' };
+    setupWithView(view);
+    await emitPlayback('playing');
+    await pressVolumeKey('VolumeDown');
+    expect(view.next).not.toHaveBeenCalled();
+    await emitPlayback('paused');
+    h.hoveredBookKey = BOOK_KEY;
+    await pressVolumeKey('VolumeDown');
+    expect(view.next).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    0,
+    undefined,
+    NaN,
+  ])('does not jump a page while the viewport size is unavailable (%s)', async (size) => {
+    const view = makeView();
+    Object.assign(view.renderer, { scrolled: true, size });
+    h.viewSettings = { volumeKeysToFlip: true, volumeKeysMode: 'scroll' };
+    setupWithView(view);
+    await pressVolumeKey('VolumeDown');
+    expect(view.next).not.toHaveBeenCalled();
+  });
+});
+
 const pressVolumeKey = async (keyName: 'VolumeUp' | 'VolumeDown') => {
   await act(async () => {
     await eventDispatcher.dispatch('native-key-down', { keyName });

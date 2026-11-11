@@ -123,9 +123,28 @@ pnpm test --run src/__tests__/services/native-server-config.test.ts \
 pnpm test:rust
 ```
 
-## Existing volume-button behavior
+## Volume-button scrolling
 
-Enable **Controls → Page Turner → Use Volume Keys** in the reader.
+Under **Controls → Page Turner**, enable **Use Volume Keys** and select
+**Volume key action → Scroll**. This enables **Scrolled Mode** using the reader's
+existing layout controls. Set **Scroll step (%)** from **1 to 100**; the default
+is **25%** of the visible reading area. Try 3–5% for small movements.
+
+Volume Down advances and Volume Up goes back. The renderer handles reading
+direction, horizontal/vertical scroll, PDF zoom and section/book boundaries.
+The current viewport and saved step are read on each press, so changing the
+step or rotating the phone does not require reopening the book. This is a
+geometric scrolling distance, not exact text-line snapping. It also works for
+image-only PDFs. The preference follows the normal global/per-book settings
+rules and resets with the reader's behavior settings.
+
+Scroll takes priority over paragraph/ruler navigation while the renderer is in
+continuous mode. It does not use full-page line snapping or the PDF page-overlap
+setting, and small steps do not count as whole-page e-ink refresh turns. If you
+manually turn Scrolled Mode off, the existing paginated behavior applies.
+
+Select **Page** to use the previous volume-button behavior (also the default
+for existing installations):
 
 - Normally each press navigates one page or one viewport in scrolled mode.
 - With **Paragraph Mode**, volume keys navigate previous/next paragraphs.
@@ -135,7 +154,7 @@ Enable **Controls → Page Turner → Use Volume Keys** in the reader.
   Paragraph Mode takes priority; disable it when using the ruler's line controls.
 - Fixed-layout formats, including PDF, use a fixed ruler step rather than text
   line snapping. A dedicated "scroll the PDF by exactly one text line per press"
-  setting is not implemented by this change.
+  setting is not implemented; use the percentage-based Scroll mode instead.
 
 Volume keys temporarily control system volume while read-aloud is playing and
 are released while reader controls are open, following upstream behavior.
