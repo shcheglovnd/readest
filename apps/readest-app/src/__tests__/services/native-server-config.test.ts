@@ -25,12 +25,26 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllEnvs();
   localStorage.clear();
   delete window.__READEST_RUNTIME_CONFIG;
 });
 
 describe('native server selection at startup', () => {
+  it('clears legacy compiled-server credentials once before a portable Android build uses its default', () => {
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 (Linux; Android 16)');
+    localStorage.setItem('token', 'legacy-local-token');
+    localStorage.setItem('sb-readest-auth-token', 'legacy-local-session');
+    localStorage.setItem('reader-preference', 'keep');
+    initializeNativeServerConfig();
+    expect(localStorage.getItem('token')).toBeNull();
+    expect(localStorage.getItem('sb-readest-auth-token')).toBeNull();
+    expect(localStorage.getItem('reader-preference')).toBe('keep');
+    localStorage.setItem('token', 'new-server-token');
+    initializeNativeServerConfig();
+    expect(localStorage.getItem('token')).toBe('new-server-token');
+  });
   it('loads the chosen backend before authentication clients are constructed', async () => {
     localStorage.setItem('readest-native-server-config', JSON.stringify(selectedServer));
     const { getRuntimeConfig } = await import('@/services/runtimeConfig');

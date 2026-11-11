@@ -1,4 +1,5 @@
-import { initializeNativeServerConfig } from './nativeServerConfig';
+import { initializeNativeServerConfig, type NativeServerConfig } from './nativeServerConfig';
+import { installNativeServerFetch } from './nativeServerFetch';
 
 export interface ReadestRuntimeConfig {
   supabaseUrl?: string;
@@ -18,13 +19,14 @@ declare global {
 }
 
 let nativeConfigLoaded = false;
-let nativeConfig: ReadestRuntimeConfig | undefined;
+let nativeConfig: NativeServerConfig | undefined;
 
 export const getRuntimeConfig = () => {
   if (typeof window === 'undefined') return undefined;
   if (process.env['NEXT_PUBLIC_APP_PLATFORM'] === 'tauri') {
     if (!nativeConfigLoaded) {
       nativeConfig = initializeNativeServerConfig();
+      if (nativeConfig) installNativeServerFetch(nativeConfig);
       nativeConfigLoaded = true;
     }
     if (nativeConfig) return nativeConfig;

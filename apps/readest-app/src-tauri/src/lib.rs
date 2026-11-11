@@ -51,6 +51,8 @@ mod parser_common;
 mod pdf_parser;
 mod range_file;
 mod sentry_config;
+#[cfg(any(target_os = "android", test))]
+mod server_certificates;
 #[cfg(desktop)]
 mod spawn_fresh_browser;
 mod transfer_file;
@@ -659,6 +661,14 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_oauth::init())
         .invoke_handler(tauri::generate_handler![
+            #[cfg(target_os = "android")]
+            server_certificates::inspect_server_certificates,
+            #[cfg(target_os = "android")]
+            server_certificates::list_server_certificates,
+            #[cfg(target_os = "android")]
+            server_certificates::import_server_certificates,
+            #[cfg(target_os = "android")]
+            server_certificates::remove_server_certificate,
             start_server,
             download_file,
             upload_file,

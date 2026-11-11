@@ -4,6 +4,10 @@
   "description": "enables the default permissions",
   "windows": ["main", "updater", "reader-*"],
   "permissions": [
+    "allow-inspect-server-certificates",
+    "allow-list-server-certificates",
+    "allow-import-server-certificates",
+    "allow-remove-server-certificate",
     "core:default",
     "fs:default",
     "fs:read-meta",

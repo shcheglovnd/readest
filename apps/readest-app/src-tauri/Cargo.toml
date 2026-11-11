@@ -109,6 +109,9 @@ tauri-plugin-webdriver = { version = "0.2", optional = true }
 localsend = { git = "https://github.com/readest/localsend", rev = "1609ca7cd5689e10cc4703e7ce178513e5d95b11", default-features = false, features = ["discovery"] }
 uuid = { version = "1", features = ["v4"] }
 pem = "4"
+# Certificate import uses parsers/hashing already present in the dependency graph.
+x509-parser = "0.18"
+sha2 = "0.10"
 anyhow = "1"
 bytes = "1"
 # Loopback media proxy (media_proxy.rs). All three already ship inside reqwest;
@@ -239,3 +242,6 @@ windows = { version = "0.61", features = [
 
 [target.'cfg(target_os = "android")'.dependencies]
 libc = "0.2"
+# All reqwest 0.12 clients (including plugin HTTP and file transfers) read the
+# app-private SSL_CERT_FILE bundle in addition to their normal WebPKI roots.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots"] }

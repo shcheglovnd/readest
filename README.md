@@ -26,7 +26,10 @@ over HTTPS, without uploading a second server-side copy of every book.
   sign-in screen. Public configuration is discovered automatically, with manual
   setup for older deployments. Server selection persists across restarts and
   resets local login sessions; full server URLs isolate authentication storage.
-  Standard certificate verification is retained.
+  Import and remove any home server's public CA or self-signed certificate
+  (PEM/DER), with fingerprint review before trusting it. The app-local trust
+  store covers sign-in, API requests and native book downloads without baking
+  personal certificates into the APK. Standard certificate verification is retained.
 
 See [filesystem library setup, configuration and tests](docker/local-library/README.md).
 See [native custom-server setup and volume-key behavior](apps/readest-app/docs/native-custom-server.md).

@@ -1,5 +1,5 @@
 import type { ReadestRuntimeConfig } from './runtimeConfig';
-import { stubTranslation as _ } from '@/utils/misc';
+import { getOSPlatform, stubTranslation as _ } from '@/utils/misc';
 
 export interface NativeServerConfig extends ReadestRuntimeConfig {
   apiBaseUrl: string;
@@ -9,6 +9,7 @@ export interface NativeServerConfig extends ReadestRuntimeConfig {
 
 const CONFIG_KEY = 'readest-native-server-config';
 const RESET_AUTH_KEY = 'readest-native-server-reset-auth';
+const PORTABLE_AUTH_KEY = 'readest-native-portable-auth-v1';
 
 export function normalizeServerUrl(input: string): string {
   const value = input.trim();
@@ -136,7 +137,15 @@ export function saveNativeServerConfig(config?: NativeServerConfig): void {
 
 export function initializeNativeServerConfig(): NativeServerConfig | undefined {
   const config = readNativeServerConfig();
-  if (localStorage.getItem(RESET_AUTH_KEY) || (localStorage.getItem(CONFIG_KEY) && !config)) {
+  // Older locally configured APKs used the same auth keys as the compiled
+  // default. Clear them once before a portable build can contact its default.
+  const firstPortableStart =
+    getOSPlatform() === 'android' && !localStorage.getItem(PORTABLE_AUTH_KEY);
+  if (
+    firstPortableStart ||
+    localStorage.getItem(RESET_AUTH_KEY) ||
+    (localStorage.getItem(CONFIG_KEY) && !config)
+  ) {
     // Runs before Supabase or AuthContext reads its session. A callback from
     // the old page cannot restore an old token after this new document loads.
     const authKeys = ['token', 'user', 'refresh_token', 'lastRedirectAt'];
@@ -148,6 +157,7 @@ export function initializeNativeServerConfig(): NativeServerConfig | undefined {
     localStorage.removeItem(RESET_AUTH_KEY);
     if (!config) localStorage.removeItem(CONFIG_KEY);
   }
+  if (firstPortableStart) localStorage.setItem(PORTABLE_AUTH_KEY, '1');
   return config;
 }
 

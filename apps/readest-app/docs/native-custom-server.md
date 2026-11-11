@@ -11,7 +11,9 @@ The web/PWA and native desktop sign-in flows keep their existing behavior.
 2. Enter the Readest server address, for example `https://books.example.org`.
    An address without a scheme uses HTTPS. Ports and reverse-proxy base paths
    are supported when the server is deployed at that path.
-3. Select **Connect and restart**, then sign in with an account on that server.
+3. If the server uses a private CA or a self-signed certificate, import its
+   **public certificate** under **Trusted certificates** as described below.
+4. Select **Connect and restart**, then sign in with an account on that server.
 
 The app discovers the public configuration from the existing
 `/runtime-config.js` endpoint. Discovery parses the JSON assignment as data;
@@ -44,12 +46,47 @@ Use a compatible Readest backend, including its authentication, database and
 file-transfer API; a folder of static ebook files is not a Readest backend.
 Existing filesystem storage adapters continue to work through those APIs.
 
-HTTPS certificates must be trusted by both the platform web view and native HTTP
-client. Normal public certificates work with the standard platform trust roots.
-Private-CA deployments need the corresponding trust configuration in both stacks;
-entering a hostname does not install a CA. This feature preserves certificate
-verification. Plain HTTP is available for deliberate LAN/development use, with a
-notice that sign-in traffic needs HTTPS protection.
+Normal public HTTPS certificates work without importing anything. For a private
+CA or self-signed HTTPS server:
+
+1. Obtain the public CA certificate (or the self-signed server certificate)
+   from the server administrator. Choose **Certificate file**. PEM and DER are
+   supported, including a PEM bundle; common extensions are `.pem`, `.crt`,
+   `.cer`, and `.der`.
+2. Review the subject, issuer, validity dates, and **SHA-256 fingerprint**.
+   Verify the fingerprint independently with the administrator, then select
+   **Trust certificate**. Choosing a file alone does not add trust.
+3. Connect to the server normally. Imported certificates persist across app
+   restarts and can be removed individually with **Remove certificate**.
+
+The certificate store is **app-local**, not the Android system/user trust store.
+No personal hostname, certificate, private key, or account is baked into the APK.
+Different people can configure the same build for their own home networks.
+Never import a private key or a PKCS#12/client-identity bundle. Invalid,
+expired/not-yet-valid certificates, private-key blocks, and ordinary server leaf
+certificates signed by another issuer are rejected; import that issuer's CA
+instead. The store supports up to 16 unique certificates within 64 KiB.
+
+On Android, requests made with `fetch` to the selected API, auth, and font origins
+use Tauri's native HTTP client. The transport is installed before authentication
+initializes. Native HTTP, discovery, and Rust file transfers all read the same
+app-private PEM bundle in addition to normal WebPKI roots. New clients reload the
+bundle after an import/removal, without rebuilding the APK. A CA is trusted by
+native HTTP throughout this app; review it as a certificate authority, not a
+single-host exception. Hostname, server-certificate validity, and chain checks
+remain enabled; there is no "ignore certificate errors" switch or WebView SSL
+error bypass. Other origins and bundled/local resources keep their existing
+WebView transport. External browsers/OAuth provider pages and direct WebView
+resources that are not loaded via `fetch` do not acquire this app-local trust.
+
+The first launch of this portable Android version clears legacy login tokens
+once, preventing a previously hardcoded server's session from reaching a changed
+compiled default. Saved custom-server configuration, downloaded books, and reader
+preferences are preserved. Switching back to the default server does not delete
+imported certificates; remove any unwanted certificate explicitly.
+
+Plain HTTP remains available for deliberate LAN/development use, with a notice
+that sign-in traffic needs HTTPS protection.
 
 Native discovery uses the existing Tauri HTTP permission scope, so the config
 endpoint does not need extra browser CORS headers. Authentication and API routes
@@ -80,8 +117,10 @@ Focused regression tests:
 
 ```sh
 pnpm test --run src/__tests__/services/native-server-config.test.ts \
+  src/__tests__/services/native-server-fetch.test.ts \
   src/__tests__/components/auth/NativeServerSettings.test.tsx \
   src/__tests__/utils/supabase-storage-key.test.ts
+pnpm test:rust
 ```
 
 ## Existing volume-button behavior

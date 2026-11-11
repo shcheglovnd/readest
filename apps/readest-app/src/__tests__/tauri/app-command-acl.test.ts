@@ -86,3 +86,19 @@ it('allows browser-session requests only in local app windows', () => {
   expect(capability.windows).not.toContain('browser-*');
   expect(capability.windows).not.toContain('*');
 });
+
+it('keeps certificate inspection and trust changes restricted to local app windows', () => {
+  const local = readCapabilityPermissions('default.json');
+  const remote = readCapabilityPermissions('webdriver-remote.json');
+  for (const command of [
+    'inspect_server_certificates',
+    'list_server_certificates',
+    'import_server_certificates',
+    'remove_server_certificate',
+  ]) {
+    const permission = `allow-${command.replaceAll('_', '-')}`;
+    expect(manifestCommands).toContain(command);
+    expect(local).toContain(permission);
+    expect(remote).not.toContain(permission);
+  }
+});

@@ -6,6 +6,7 @@ import { IoChevronDown } from 'react-icons/io5';
 import { useTranslation } from '@/hooks/useTranslation';
 import { getBaseUrl } from '@/services/environment';
 import { getOSPlatform } from '@/utils/misc';
+import NativeServerCertificates from './NativeServerCertificates';
 import {
   discoverNativeServer,
   normalizeServerUrl,
@@ -23,11 +24,13 @@ function ServerConnectionForm({ supabaseClient }: { supabaseClient: SupabaseClie
   const [publicKey, setPublicKey] = useState('');
   const [advanced, setAdvanced] = useState(false);
   const [pending, setPending] = useState(false);
+  const [certificatesBusy, setCertificatesBusy] = useState(false);
+  const busy = pending || certificatesBusy;
   const [error, setError] = useState('');
 
   const connect = async (event: FormEvent) => {
     event.preventDefault();
-    if (pending) return;
+    if (busy) return;
     setPending(true);
     setError('');
     try {
@@ -56,7 +59,7 @@ function ServerConnectionForm({ supabaseClient }: { supabaseClient: SupabaseClie
   };
 
   const useDefaultServer = async () => {
-    if (pending) return;
+    if (busy) return;
     setPending(true);
     setError('');
     try {
@@ -93,7 +96,7 @@ function ServerConnectionForm({ supabaseClient }: { supabaseClient: SupabaseClie
             autoComplete='off'
             spellCheck={false}
             required
-            disabled={pending}
+            disabled={busy}
             value={address}
             onChange={(event) => setAddress(event.target.value)}
           />
@@ -101,6 +104,7 @@ function ServerConnectionForm({ supabaseClient }: { supabaseClient: SupabaseClie
         <p className='text-base-content/70 text-xs leading-relaxed'>
           {_('Changing servers signs you out. Downloaded books stay on this device.')}
         </p>
+        <NativeServerCertificates disabled={busy} onBusyChange={setCertificatesBusy} />
         {address.trim().startsWith('http://') && (
           <p className='text-sm'>{_('Use HTTPS to protect your sign-in details.')}</p>
         )}
@@ -119,7 +123,7 @@ function ServerConnectionForm({ supabaseClient }: { supabaseClient: SupabaseClie
                 autoCapitalize='none'
                 autoComplete='off'
                 spellCheck={false}
-                disabled={pending}
+                disabled={busy}
                 value={authAddress}
                 onChange={(event) => setAuthAddress(event.target.value)}
               />
@@ -132,7 +136,7 @@ function ServerConnectionForm({ supabaseClient }: { supabaseClient: SupabaseClie
                 autoCapitalize='none'
                 autoComplete='off'
                 spellCheck={false}
-                disabled={pending}
+                disabled={busy}
                 value={publicKey}
                 onChange={(event) => setPublicKey(event.target.value)}
               />
@@ -144,14 +148,14 @@ function ServerConnectionForm({ supabaseClient }: { supabaseClient: SupabaseClie
             {error}
           </p>
         )}
-        <button type='submit' className='btn btn-contrast min-h-11 w-full' disabled={pending}>
+        <button type='submit' className='btn btn-contrast min-h-11 w-full' disabled={busy}>
           {pending ? _('Connecting…') : _('Connect and restart')}
         </button>
         {current && (
           <button
             type='button'
             className='btn btn-ghost min-h-11 w-full'
-            disabled={pending}
+            disabled={busy}
             onClick={useDefaultServer}
           >
             {_('Use default server')}

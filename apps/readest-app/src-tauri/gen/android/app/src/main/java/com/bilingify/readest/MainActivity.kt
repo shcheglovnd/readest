@@ -271,6 +271,12 @@ class MainActivity : TauriActivity(), KeyDownInterceptor {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Set the path once, before starting Rust. The certificate settings UI
+        // atomically replaces this app-private bundle; each new reqwest client
+        // reloads it. No server name, CA, or private key is bundled in the APK.
+        val caBundle = java.io.File(applicationInfo.dataDir, "readest-ca-bundle.pem")
+        if (!caBundle.exists()) caBundle.createNewFile()
+        android.system.Os.setenv("SSL_CERT_FILE", caBundle.absolutePath, true)
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 

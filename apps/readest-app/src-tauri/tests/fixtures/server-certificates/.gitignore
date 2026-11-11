@@ -1,0 +1,5 @@
+# These are public test certificates; no private keys belong in this directory.
+!example-ca.pem
+!expired-ca.pem
+!second-ca.pem
+!self-signed-server.pem
