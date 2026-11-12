@@ -8,7 +8,7 @@ import { useDeviceControlStore } from '@/store/deviceStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useSidebarStore } from '@/store/sidebarStore';
 import { eventDispatcher } from '@/utils/event';
-import { normalizeVolumeScrollStep } from '@/utils/volumeScroll';
+import { normalizeVolumeScrollStep, VolumeScrollAnimator } from '@/utils/volumeScroll';
 import {
   resolvePageTurn,
   normalizeDomKeyEvent,
@@ -314,6 +314,39 @@ export const usePagination = (
   // the volume-key page-flip guard.
   const ttsPlayingRef = useRef(false);
   const volumeScrollPendingRef = useRef(false);
+  const volumeScrollAnimatorRef = useRef<VolumeScrollAnimator | null>(null);
+  if (!volumeScrollAnimatorRef.current) {
+    volumeScrollAnimatorRef.current = new VolumeScrollAnimator((delta) => {
+      const settings = getViewSettings(bookKey);
+      const view = viewRef.current;
+      if (
+        !getViewState(bookKey)?.inited ||
+        !settings?.volumeKeysToFlip ||
+        settings.volumeKeysMode !== 'scroll' ||
+        !view?.renderer.scrolled ||
+        ttsPlayingRef.current ||
+        volumeScrollPendingRef.current ||
+        useReaderStore.getState().hoveredBookKey ||
+        useSettingsStore.getState().isSettingsDialogOpen ||
+        hasReaderOverlay()
+      )
+        return false;
+      const renderer = view.renderer;
+      const before = renderer.containerPosition;
+      const sign = renderer.scrollProp === 'scrollLeft' ? -1 : 1;
+      renderer.containerPosition = before + sign * delta;
+      if (renderer.containerPosition !== before) return true;
+      if (!(delta < 0 ? renderer.atStart : renderer.atEnd)) {
+        volumeScrollPendingRef.current = true;
+        void (delta < 0 ? view.prev(Math.abs(delta)) : view.next(delta))
+          .catch((error: unknown) => console.warn('Volume scroll section navigation failed', error))
+          .finally(() => {
+            volumeScrollPendingRef.current = false;
+          });
+      }
+      return false;
+    });
+  }
 
   const handlePageFlip = async (
     msg: MessageEvent | CustomEvent | React.MouseEvent<HTMLDivElement, MouseEvent>,
@@ -485,22 +518,14 @@ export const usePagination = (
             (size * normalizeVolumeScrollStep(viewSettings.volumeKeysScrollStep)) / 100,
           );
           const backward = keyName === 'VolumeUp';
-          // Held keys must not restart PDF smooth scrolling or wait for EPUB's
-          // page-animation lock on every repeat. Use the same direct scroll
-          // position as Auto Scroll; native scroll events preload and relocate.
-          // No repeat queue means releasing the key stops immediately.
           if (msg.detail.repeat) {
-            if (volumeScrollPendingRef.current) return;
-            const renderer = view.renderer;
-            const before = renderer.containerPosition;
-            const sign = renderer.scrollProp === 'scrollLeft' ? -1 : 1;
-            renderer.containerPosition = before + sign * (backward ? -distance : distance);
-            if (renderer.containerPosition !== before) return;
-            if (backward ? renderer.atStart : renderer.atEnd) return;
+            if (!volumeScrollPendingRef.current) {
+              volumeScrollAnimatorRef.current?.repeat(keyName, backward ? -distance : distance);
+            }
+            return;
           }
-          // A clamped position may be the edge of the rendered buffer rather
-          // than the book. Let normal navigation load its adjacent section,
-          // allowing only one outstanding load and no delayed repeats.
+          volumeScrollAnimatorRef.current?.stop();
+          // Taps keep normal navigation; never queue one behind a section load.
           if (volumeScrollPendingRef.current) return;
           volumeScrollPendingRef.current = true;
           try {
@@ -673,9 +698,22 @@ export const usePagination = (
   useEffect(() => {
     if (!appService?.isMobileApp) return;
 
+    const stopScroll = () => volumeScrollAnimatorRef.current?.stop();
+    const keyUp = (event: CustomEvent) =>
+      volumeScrollAnimatorRef.current?.stop(event.detail.keyName);
+    const visibility = () => {
+      if (document.hidden) stopScroll();
+    };
     eventDispatcher.on('native-key-down', handlePageFlip);
+    eventDispatcher.on('native-key-up', keyUp);
+    window.addEventListener('blur', stopScroll);
+    document.addEventListener('visibilitychange', visibility);
     return () => {
       eventDispatcher.off('native-key-down', handlePageFlip);
+      eventDispatcher.off('native-key-up', keyUp);
+      window.removeEventListener('blur', stopScroll);
+      document.removeEventListener('visibilitychange', visibility);
+      stopScroll();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -702,7 +740,10 @@ export const usePagination = (
   const volumeKeysToFlip = !!getViewSettings(bookKey)?.volumeKeysToFlip;
   useEffect(() => {
     if (!appService?.isMobileApp) return;
-    if (!volumeKeysToFlip || ttsPlaying || readerControlsOpen) return;
+    if (!volumeKeysToFlip || ttsPlaying || readerControlsOpen) {
+      volumeScrollAnimatorRef.current?.stop();
+      return;
+    }
 
     acquireVolumeKeyInterception();
     return () => {

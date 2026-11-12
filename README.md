@@ -33,8 +33,8 @@ over HTTPS, without uploading a second server-side copy of every book.
 - **Volume-button scroll steps:** native mobile readers can select Page or Scroll
   and set a 1–100% viewport step for EPUB and PDF. Scroll enables continuous
   reading; its step is independent of page overlap and the reading ruler.
-  On Android, held buttons bypass repeated scroll animations without queuing
-  steps after release.
+  On Android, held buttons scroll smoothly between repeats and stop on release
+  without queuing a backlog.
 
 See [filesystem library setup, configuration and tests](docker/local-library/README.md).
 See [native custom-server setup and volume-key behavior](apps/readest-app/docs/native-custom-server.md).

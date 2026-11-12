@@ -6,6 +6,7 @@ import { NativeTouchEventType } from '@/types/system';
 declare global {
   interface Window {
     onNativeKeyDown?: (keyName: string, keyCode?: number, repeat?: boolean) => void;
+    onNativeKeyUp?: (keyName: string, keyCode?: number) => void;
     onNativeTouch?: (event: NativeTouchEventType) => void;
   }
 }
@@ -61,6 +62,8 @@ export const useDeviceControlStore = create<DeviceControlState>((set, get) => ({
     const { volumeKeysInterceptionCount } = get();
     if (volumeKeysInterceptionCount == 0) {
       window.onNativeKeyDown = handleNativeKeyDown;
+      window.onNativeKeyUp = (keyName, keyCode) =>
+        eventDispatcher.dispatch('native-key-up', { keyName, keyCode });
       interceptKeys({ volumeKeys: true });
       set({ volumeKeysIntercepted: true });
     }

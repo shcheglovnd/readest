@@ -28,6 +28,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   // Clean up window handlers
   delete window.onNativeKeyDown;
+  delete window.onNativeKeyUp;
   delete window.onNativeTouch;
 });
 
@@ -316,6 +317,16 @@ describe('deviceStore', () => {
         keyName: 'VolumeDown',
         keyCode: 25,
         repeat: true,
+      });
+    });
+
+    test('forwards key release so a held scroll can stop immediately', async () => {
+      const { eventDispatcher } = await import('@/utils/event');
+      useDeviceControlStore.getState().acquireVolumeKeyInterception();
+      window.onNativeKeyUp?.('VolumeDown', 25);
+      expect(eventDispatcher.dispatch).toHaveBeenCalledWith('native-key-up', {
+        keyName: 'VolumeDown',
+        keyCode: 25,
       });
     });
 

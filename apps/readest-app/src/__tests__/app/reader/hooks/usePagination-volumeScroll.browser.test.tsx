@@ -156,21 +156,41 @@ describe('volume steps with actual EPUB and PDF renderers', () => {
     await new Promise((resolve) => setTimeout(resolve, 550));
     const start = position();
     const step = view!.renderer.size * 0.05;
-    let moves = 0;
+    const samples: number[] = [];
+    let frame = 0;
+    let relocations = 0;
+    view!.addEventListener('relocate', () => {
+      relocations++;
+    });
+    const sample = () => {
+      samples.push(position());
+      frame = requestAnimationFrame(sample);
+    };
+    frame = requestAnimationFrame(sample);
     const heldAt = performance.now();
-    for (let i = 0; i < 20; i++) {
-      const before = position();
-      await press('VolumeDown', true);
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      if (position() - before > step * 0.7) moves++;
+    try {
+      for (let i = 0; i < 20; i++) {
+        await press('VolumeDown', true);
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      await window.onNativeKeyUp?.('VolumeDown', 25);
+    } finally {
+      cancelAnimationFrame(frame);
     }
     expect(performance.now() - heldAt).toBeLessThan(2500);
-    expect(moves).toBeGreaterThanOrEqual(18);
-    expect(Math.abs(position() - start - step * 20)).toBeLessThan(4);
+    const advances = samples.slice(1).map((pos, index) => pos - samples[index]!);
+    // More visible movements than native key repeats proves interpolation,
+    // rather than twenty immediate jumps separated by unchanged frames.
+    expect(advances.filter((delta) => delta > 0.5).length).toBeGreaterThan(25);
+    expect(Math.abs(position() - start - step * 20)).toBeLessThan(step * 1.5);
     const released = position();
     await new Promise((resolve) => setTimeout(resolve, 450));
     expect(Math.abs(position() - released)).toBeLessThan(3);
+    expect(relocations).toBeGreaterThan(0);
     await press('VolumeUp', true);
-    await vi.waitFor(() => expect(Math.abs(position() - released + step)).toBeLessThan(3));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await window.onNativeKeyUp?.('VolumeUp', 24);
+    expect(position()).toBeLessThan(released);
+    expect(position()).toBeGreaterThanOrEqual(released - step * 1.5);
   }, 40000);
 });

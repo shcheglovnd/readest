@@ -83,6 +83,9 @@ class MainActivity : TauriActivity(), KeyDownInterceptor {
             hasWindowFocus = true
             ensureInitialPaint()
             focusWebView()
+        } else {
+            forwardKeyUpToWebView(KeyEvent.KEYCODE_VOLUME_UP)
+            forwardKeyUpToWebView(KeyEvent.KEYCODE_VOLUME_DOWN)
         }
     }
 
@@ -106,6 +109,14 @@ class MainActivity : TauriActivity(), KeyDownInterceptor {
     private fun forwardKeyToWebView(keyName: String, keyCode: Int, repeat: Boolean = false) {
         wv?.evaluateJavascript(
             """try { window.onNativeKeyDown("$keyName", $keyCode, $repeat); } catch (_) {}""",
+            null
+        )
+    }
+
+    private fun forwardKeyUpToWebView(keyCode: Int) {
+        val keyName = keyNameFor(keyCode)
+        wv?.evaluateJavascript(
+            """try { window.onNativeKeyUp?.("$keyName", $keyCode); } catch (_) {}""",
             null
         )
     }
@@ -196,6 +207,11 @@ class MainActivity : TauriActivity(), KeyDownInterceptor {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_UP &&
+            (event.keyCode == KeyEvent.KEYCODE_VOLUME_UP || event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN)) {
+            forwardKeyUpToWebView(event.keyCode)
+            if (interceptVolumeKeysEnabled) return true
+        }
         if (event.action == KeyEvent.ACTION_DOWN) {
             val keyCode = event.keyCode
 
