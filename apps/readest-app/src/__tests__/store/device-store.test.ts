@@ -308,6 +308,17 @@ describe('deviceStore', () => {
       });
     });
 
+    test('preserves Android hold repeats for the scroll handler', async () => {
+      const { eventDispatcher } = await import('@/utils/event');
+      useDeviceControlStore.getState().acquireVolumeKeyInterception();
+      window.onNativeKeyDown?.('VolumeDown', 25, true);
+      expect(eventDispatcher.dispatch).toHaveBeenCalledWith('native-key-down', {
+        keyName: 'VolumeDown',
+        keyCode: 25,
+        repeat: true,
+      });
+    });
+
     test('forwards the Back key synchronously', async () => {
       const { eventDispatcher } = await import('@/utils/event');
       useDeviceControlStore.getState().acquirePageTurnerKeyInterception();

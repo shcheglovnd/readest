@@ -143,6 +143,11 @@ continuous mode. It does not use full-page line snapping or the PDF page-overlap
 setting, and small steps do not count as whole-page e-ink refresh turns. If you
 manually turn Scrolled Mode off, the existing paginated behavior applies.
 
+On Android, holding a volume button repeats the chosen step without restarting
+an animation for every repeat. A tap retains its normal animation. Repeats are
+not queued during a section load, so releasing the button leaves no scroll
+backlog. The device controls the initial hold delay and repeat rate.
+
 Select **Page** to use the previous volume-button behavior (also the default
 for existing installations):
 

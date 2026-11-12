@@ -78,9 +78,9 @@ afterEach(() => {
   book = undefined;
 });
 
-const press = async (key: 'VolumeDown' | 'VolumeUp') => {
+const press = async (key: 'VolumeDown' | 'VolumeUp', repeat = false) => {
   await act(async () => {
-    await window.onNativeKeyDown?.(key);
+    await window.onNativeKeyDown?.(key, key === 'VolumeDown' ? 25 : 24, repeat);
   });
 };
 
@@ -102,6 +102,7 @@ const load = async (format: 'epub' | 'pdf') => {
   });
   document.body.appendChild(view);
   await view.open(book);
+  view.renderer.setAttribute('animated', '');
   view.renderer.setAttribute('flow', 'scrolled');
   view.renderer.setAttribute('max-inline-size', '360');
   const target =
@@ -144,5 +145,32 @@ describe('volume steps with actual EPUB and PDF renderers', () => {
       () => expect(Math.abs(position() - smallForward + viewport * 0.05)).toBeLessThan(3),
       { timeout: 10000 },
     );
+  }, 40000);
+  test.each([
+    'epub',
+    'pdf',
+  ] as const)('keeps up with a held button in animated %s without trailing scrolls', async (format) => {
+    await load(format);
+    h.viewSettings = { ...h.viewSettings, volumeKeysScrollStep: 5 };
+    await press('VolumeDown');
+    await new Promise((resolve) => setTimeout(resolve, 550));
+    const start = position();
+    const step = view!.renderer.size * 0.05;
+    let moves = 0;
+    const heldAt = performance.now();
+    for (let i = 0; i < 20; i++) {
+      const before = position();
+      await press('VolumeDown', true);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      if (position() - before > step * 0.7) moves++;
+    }
+    expect(performance.now() - heldAt).toBeLessThan(2500);
+    expect(moves).toBeGreaterThanOrEqual(18);
+    expect(Math.abs(position() - start - step * 20)).toBeLessThan(4);
+    const released = position();
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    expect(Math.abs(position() - released)).toBeLessThan(3);
+    await press('VolumeUp', true);
+    await vi.waitFor(() => expect(Math.abs(position() - released + step)).toBeLessThan(3));
   }, 40000);
 });

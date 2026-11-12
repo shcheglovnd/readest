@@ -313,6 +313,7 @@ export const usePagination = (
   // the ttsPlaying state directly without going stale. This ref mirrors it for
   // the volume-key page-flip guard.
   const ttsPlayingRef = useRef(false);
+  const volumeScrollPendingRef = useRef(false);
 
   const handlePageFlip = async (
     msg: MessageEvent | CustomEvent | React.MouseEvent<HTMLDivElement, MouseEvent>,
@@ -483,7 +484,30 @@ export const usePagination = (
             1,
             (size * normalizeVolumeScrollStep(viewSettings.volumeKeysScrollStep)) / 100,
           );
-          await (keyName === 'VolumeUp' ? view.prev(distance) : view.next(distance));
+          const backward = keyName === 'VolumeUp';
+          // Held keys must not restart PDF smooth scrolling or wait for EPUB's
+          // page-animation lock on every repeat. Use the same direct scroll
+          // position as Auto Scroll; native scroll events preload and relocate.
+          // No repeat queue means releasing the key stops immediately.
+          if (msg.detail.repeat) {
+            if (volumeScrollPendingRef.current) return;
+            const renderer = view.renderer;
+            const before = renderer.containerPosition;
+            const sign = renderer.scrollProp === 'scrollLeft' ? -1 : 1;
+            renderer.containerPosition = before + sign * (backward ? -distance : distance);
+            if (renderer.containerPosition !== before) return;
+            if (backward ? renderer.atStart : renderer.atEnd) return;
+          }
+          // A clamped position may be the edge of the rendered buffer rather
+          // than the book. Let normal navigation load its adjacent section,
+          // allowing only one outstanding load and no delayed repeats.
+          if (volumeScrollPendingRef.current) return;
+          volumeScrollPendingRef.current = true;
+          try {
+            await (backward ? view.prev(distance) : view.next(distance));
+          } finally {
+            volumeScrollPendingRef.current = false;
+          }
           return;
         }
         if (

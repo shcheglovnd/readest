@@ -149,6 +149,65 @@ describe('volume-button scroll steps', () => {
     }
   });
 
+  test.each([
+    'scrollTop',
+    'scrollLeft',
+  ])('held repeats scroll immediately on %s without starting animations', async (scrollProp) => {
+    const view = makeView();
+    Object.assign(view.renderer, { scrolled: true, size: 800, scrollProp, containerPosition: 0 });
+    h.viewSettings = { volumeKeysToFlip: true, volumeKeysMode: 'scroll', volumeKeysScrollStep: 5 };
+    setupWithView(view);
+    const renderer = view.renderer as typeof view.renderer & { containerPosition: number };
+    for (let i = 0; i < 20; i++) await pressVolumeKey('VolumeDown', true);
+    expect(renderer.containerPosition).toBe(scrollProp === 'scrollLeft' ? -800 : 800);
+    await pressVolumeKey('VolumeUp', true);
+    expect(renderer.containerPosition).toBe(scrollProp === 'scrollLeft' ? -760 : 760);
+    expect(view.next).not.toHaveBeenCalled();
+    expect(view.prev).not.toHaveBeenCalled();
+  });
+
+  test('never queues repeats behind an unfinished tap or section load', async () => {
+    const view = makeView();
+    let finish!: () => void;
+    view.next.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    Object.assign(view.renderer, { scrolled: true, size: 800, containerPosition: 0 });
+    h.viewSettings = { volumeKeysToFlip: true, volumeKeysMode: 'scroll', volumeKeysScrollStep: 5 };
+    setupWithView(view);
+    const tap = pressVolumeKey('VolumeDown');
+    for (let i = 0; i < 20; i++) await pressVolumeKey('VolumeDown', true);
+    try {
+      expect(view.next).toHaveBeenCalledTimes(1);
+    } finally {
+      finish();
+      await tap;
+    }
+    expect(view.next).toHaveBeenCalledTimes(1);
+    await pressVolumeKey('VolumeDown', true);
+    expect(
+      (view.renderer as typeof view.renderer & { containerPosition: number }).containerPosition,
+    ).toBe(40);
+  });
+
+  test('advances across a rendered boundary and recovers after a failed load', async () => {
+    const view = makeView();
+    Object.assign(view.renderer, { scrolled: true, size: 800, atEnd: false });
+    Object.defineProperty(view.renderer, 'containerPosition', { get: () => 500, set: () => {} });
+    h.viewSettings = { volumeKeysToFlip: true, volumeKeysMode: 'scroll', volumeKeysScrollStep: 5 };
+    setupWithView(view);
+    view.next.mockRejectedValueOnce(new Error('Section load failed'));
+    await expect(pressVolumeKey('VolumeDown', true)).rejects.toThrow('Section load failed');
+    await pressVolumeKey('VolumeDown', true);
+    expect(view.next).toHaveBeenCalledTimes(2);
+    Object.assign(view.renderer, { atEnd: true });
+    await pressVolumeKey('VolumeDown', true);
+    expect(view.next).toHaveBeenCalledTimes(2);
+  });
+
   test('keeps ordinary page turning when continuous scrolling is off', async () => {
     const view = makeView();
     h.viewSettings = { volumeKeysToFlip: true, volumeKeysMode: 'scroll', volumeKeysScrollStep: 5 };
@@ -185,9 +244,9 @@ describe('volume-button scroll steps', () => {
   });
 });
 
-const pressVolumeKey = async (keyName: 'VolumeUp' | 'VolumeDown') => {
+const pressVolumeKey = async (keyName: 'VolumeUp' | 'VolumeDown', repeat = false) => {
   await act(async () => {
-    await eventDispatcher.dispatch('native-key-down', { keyName });
+    await eventDispatcher.dispatch('native-key-down', { keyName, repeat });
   });
 };
 

@@ -5,19 +5,23 @@ import { NativeTouchEventType } from '@/types/system';
 
 declare global {
   interface Window {
-    onNativeKeyDown?: (keyName: string, keyCode?: number) => void;
+    onNativeKeyDown?: (keyName: string, keyCode?: number, repeat?: boolean) => void;
     onNativeTouch?: (event: NativeTouchEventType) => void;
   }
 }
 
-const handleNativeKeyDown = (keyName: string, keyCode?: number) => {
+const handleNativeKeyDown = (keyName: string, keyCode?: number, repeat?: boolean) => {
   // Back is handled synchronously so dialogs can consume it before it
   // bubbles; every other key (volume, media, learn-mode captures) is
   // dispatched asynchronously through the same channel.
   if (keyName === 'Back') {
     return eventDispatcher.dispatchSync('native-key-down', { keyName, keyCode });
   }
-  return eventDispatcher.dispatch('native-key-down', { keyName, keyCode });
+  return eventDispatcher.dispatch('native-key-down', {
+    keyName,
+    keyCode,
+    ...(repeat === undefined ? {} : { repeat }),
+  });
 };
 
 type DeviceControlState = {

@@ -103,9 +103,9 @@ class MainActivity : TauriActivity(), KeyDownInterceptor {
     private fun keyNameFor(keyCode: Int): String =
         keyEventMap[keyCode] ?: mediaKeyMap[keyCode] ?: "Keycode$keyCode"
 
-    private fun forwardKeyToWebView(keyName: String, keyCode: Int) {
+    private fun forwardKeyToWebView(keyName: String, keyCode: Int, repeat: Boolean = false) {
         wv?.evaluateJavascript(
-            """try { window.onNativeKeyDown("$keyName", $keyCode); } catch (_) {}""",
+            """try { window.onNativeKeyDown("$keyName", $keyCode, $repeat); } catch (_) {}""",
             null
         )
     }
@@ -223,7 +223,7 @@ class MainActivity : TauriActivity(), KeyDownInterceptor {
                 }
 
                 if (shouldIntercept) {
-                    forwardKeyToWebView(keyName, keyCode)
+                    forwardKeyToWebView(keyName, keyCode, event.repeatCount > 0)
                     return true
                 }
             }
