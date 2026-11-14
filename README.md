@@ -40,6 +40,11 @@ over HTTPS, without uploading a second server-side copy of every book.
   page visit and pause after ten minutes without a reading-position update.
   Existing statistics are preserved.
 
+- **Quiet Audiobookshelf credential sync:** routine reading-library checks keep
+  their sync timestamps local. Metadata edits and token rotations publish only
+  changed fields, preserving unchanged credential ciphertext across web reloads.
+  Explicit Sync Now can still upload credentials after enabling and unlocking sync.
+
 See [filesystem library setup, configuration and tests](docker/local-library/README.md).
 See [native custom-server setup and volume-key behavior](apps/readest-app/docs/native-custom-server.md).
 The `homelab` branch starts from upstream Readest 0.12.20 at

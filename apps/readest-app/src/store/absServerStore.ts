@@ -6,11 +6,25 @@ import { parseAbsFilePath } from '@/utils/audiobook';
 import { useSettingsStore } from './settingsStore';
 import { getReplicaPersistEnv } from '@/services/sync/replicaPersist';
 import { publishReplicaDelete, publishReplicaUpsert } from '@/services/sync/replicaPublish';
-import { computeAbsServerContentId, ABS_SERVER_KIND } from '@/services/sync/adapters/absServer';
+import {
+  computeAbsServerContentId,
+  ABS_SERVER_KIND,
+  absServerAdapter,
+} from '@/services/sync/adapters/absServer';
 
-const publishAbsUpsert = (server: ABSServer): void => {
+const publishAbsUpsert = (server: ABSServer, fieldsToPublish?: readonly string[]): void => {
   if (!server.contentId) return;
-  void publishReplicaUpsert(ABS_SERVER_KIND, server, server.contentId, server.reincarnation);
+  if (fieldsToPublish) {
+    void publishReplicaUpsert(
+      ABS_SERVER_KIND,
+      server,
+      server.contentId,
+      server.reincarnation,
+      fieldsToPublish,
+    );
+  } else {
+    void publishReplicaUpsert(ABS_SERVER_KIND, server, server.contentId, server.reincarnation);
+  }
 };
 
 const publishAbsDelete = (contentId: string): void => {
@@ -139,11 +153,13 @@ export const useABSServerStore = create<ABSServerStoreState>((set, get) => ({
 
   updateServer: (id, patch) => {
     let updated: ABSServer | undefined;
+    let previous: ABSServer | undefined;
     set((state) => {
       const idx = state.servers.findIndex((s) => s.id === id);
       if (idx < 0) return state;
       const old = state.servers[idx]!;
       if (old.deletedAt) return state;
+      previous = old;
       updated = { ...old, ...patch };
       // Recompute contentId only if the URL itself changed; otherwise
       // preserve the existing one so we keep the same server row.
@@ -154,7 +170,21 @@ export const useABSServerStore = create<ABSServerStoreState>((set, get) => ({
         servers: state.servers.map((s, i) => (i === idx ? updated! : s)),
       };
     });
-    if (updated) publishAbsUpsert(updated);
+    if (updated && previous) {
+      if (updated.contentId !== previous.contentId) {
+        // A new URL identity needs a complete initial record, including credentials.
+        publishAbsUpsert(updated);
+      } else {
+        const before = absServerAdapter.pack(previous);
+        const after = absServerAdapter.pack(updated);
+        const changedFields = Object.keys(patch).filter(
+          (key) => key in after && JSON.stringify(before[key]) !== JSON.stringify(after[key]),
+        );
+        // lastSyncedAt and cipher fingerprints are device-local; unchanged
+        // passwords/tokens must keep their existing ciphertext on other devices.
+        if (changedFields.length > 0) publishAbsUpsert(updated, changedFields);
+      }
+    }
     return updated;
   },
 

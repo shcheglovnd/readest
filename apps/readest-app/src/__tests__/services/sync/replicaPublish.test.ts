@@ -436,6 +436,70 @@ describe('publishReplicaUpsert credentials gate', () => {
   });
 });
 
+describe('selected replica fields', () => {
+  const server = {
+    id: 'abs-1',
+    name: 'Home',
+    url: 'https://abs.example.test',
+    addedAt: 1,
+    password: 'test-password',
+    accessToken: 'test-token',
+    libraryIds: ['library-1'],
+  };
+
+  beforeEach(async () => {
+    const { absServerAdapter } = await import('@/services/sync/adapters/absServer');
+    const { useSettingsStore } = await import('@/store/settingsStore');
+    registerReplicaAdapter(absServerAdapter);
+    useSettingsStore.setState({ settings: { syncCategories: { credentials: true } } as never });
+    cryptoMocks.isUnlocked.mockReturnValue(true);
+  });
+
+  afterEach(async () => {
+    const { useSettingsStore } = await import('@/store/settingsStore');
+    useSettingsStore.setState({ settings: undefined } as never);
+    cryptoMocks.isUnlocked.mockReturnValue(true);
+  });
+
+  test('metadata-only updates never encrypt or send existing credentials', async () => {
+    const ctx = makeFakeCtx();
+    (getReplicaSync as ReturnType<typeof vi.fn>).mockReturnValue(ctx);
+    vi.mocked(getUserID).mockResolvedValue('user-1');
+    await publishReplicaUpsert('abs_server', server, 'abs-1', undefined, ['libraryIds']);
+    const row = ctx.manager.markDirty.mock.calls[0]?.[0] as ReplicaRow;
+    expect(Object.keys(row.fields_jsonb)).toEqual(['libraryIds']);
+    expect(cryptoMocks.encryptField).not.toHaveBeenCalled();
+  });
+
+  test('encrypts only the credential that actually changed', async () => {
+    const ctx = makeFakeCtx();
+    (getReplicaSync as ReturnType<typeof vi.fn>).mockReturnValue(ctx);
+    vi.mocked(getUserID).mockResolvedValue('user-1');
+    await publishReplicaUpsert('abs_server', server, 'abs-1', undefined, ['accessToken']);
+    const row = ctx.manager.markDirty.mock.calls[0]?.[0] as ReplicaRow;
+    expect(Object.keys(row.fields_jsonb)).toEqual(['accessToken']);
+    expect(cryptoMocks.encryptField).toHaveBeenCalledExactlyOnceWith('test-token');
+  });
+
+  test('does not queue an empty selected patch', async () => {
+    const ctx = makeFakeCtx();
+    (getReplicaSync as ReturnType<typeof vi.fn>).mockReturnValue(ctx);
+    vi.mocked(getUserID).mockResolvedValue('user-1');
+    await publishReplicaUpsert('abs_server', server, 'abs-1', undefined, []);
+    expect(ctx.manager.markDirty).not.toHaveBeenCalled();
+  });
+
+  test('a selected credential remains omitted while the session is locked', async () => {
+    const ctx = makeFakeCtx();
+    (getReplicaSync as ReturnType<typeof vi.fn>).mockReturnValue(ctx);
+    vi.mocked(getUserID).mockResolvedValue('user-1');
+    cryptoMocks.isUnlocked.mockReturnValue(false);
+    await publishReplicaUpsert('abs_server', server, 'abs-1', undefined, ['accessToken']);
+    expect(ctx.manager.markDirty).not.toHaveBeenCalled();
+    expect(cryptoMocks.encryptField).not.toHaveBeenCalled();
+  });
+});
+
 // Suppress unused import lint when running standalone
 void hlcPack;
 void ({} as Hlc);

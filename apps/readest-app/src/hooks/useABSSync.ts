@@ -3,6 +3,8 @@ import { useEnv } from '@/context/EnvContext';
 import { useABSServerStore } from '@/store/absServerStore';
 import { backfillAbsCovers, syncAllAbsServers } from '@/services/audiobookshelf/librarySync';
 import { eventDispatcher } from '@/utils/event';
+import { publishReplicaUpsert } from '@/services/sync/replicaPublish';
+import { ABS_SERVER_KIND } from '@/services/sync/adapters/absServer';
 
 const AUTO_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -23,27 +25,43 @@ export function useABSSync() {
     await useABSServerStore.getState().loadABSServers(envConfig);
   }, [envConfig]);
 
-  const checkABSServers = useCallback(async () => {
-    if (!appService) return;
-    if (isSyncingRef.current) return;
-    // On a fresh boot nothing has hydrated useABSServerStore yet (no
-    // IntegrationsPanel mount, no replica pull), so the empty-store no-op
-    // below must only fire after hydration has actually run at least once.
-    await ensureHydrated();
-    if (useABSServerStore.getState().getAvailableServers().length === 0) return;
+  const checkABSServers = useCallback(
+    async (publishCredentials = false) => {
+      if (!appService) return;
+      if (isSyncingRef.current) return;
+      // On a fresh boot nothing has hydrated useABSServerStore yet (no
+      // IntegrationsPanel mount, no replica pull), so the empty-store no-op
+      // below must only fire after hydration has actually run at least once.
+      await ensureHydrated();
+      if (useABSServerStore.getState().getAvailableServers().length === 0) return;
 
-    try {
-      isSyncingRef.current = true;
-      // Covers first, unauthenticated: books adopted via the cloud channel
-      // must not stay coverless behind a failing (or absent) login.
-      await backfillAbsCovers(appService);
-      await syncAllAbsServers(appService);
-    } catch (error) {
-      console.error('ABS sync error:', error);
-    } finally {
-      isSyncingRef.current = false;
-    }
-  }, [appService, ensureHydrated]);
+      try {
+        isSyncingRef.current = true;
+        // Covers first, unauthenticated: books adopted via the cloud channel
+        // must not stay coverless behind a failing (or absent) login.
+        await backfillAbsCovers(appService);
+        await syncAllAbsServers(appService);
+        // Explicit Sync Now also seeds credentials enabled/unlocked after initial
+        // connection. Startup and periodic checks leave unchanged ciphers intact.
+        if (publishCredentials) {
+          for (const server of useABSServerStore.getState().getAvailableServers()) {
+            if (!server.contentId) continue;
+            await publishReplicaUpsert(
+              ABS_SERVER_KIND,
+              server,
+              server.contentId,
+              server.reincarnation,
+            );
+          }
+        }
+      } catch (error) {
+        console.error('ABS sync error:', error);
+      } finally {
+        isSyncingRef.current = false;
+      }
+    },
+    [appService, ensureHydrated],
+  );
 
   // Auto-trigger on startup once the app service is ready.
   useEffect(() => {
@@ -52,7 +70,7 @@ export function useABSSync() {
 
   // Listen for explicit sync requests (settings form "Sync now" and after connect).
   useEffect(() => {
-    const handler = () => checkABSServers();
+    const handler = () => checkABSServers(true);
     eventDispatcher.on('sync-abs-servers', handler);
     return () => eventDispatcher.off('sync-abs-servers', handler);
   }, [checkABSServers]);

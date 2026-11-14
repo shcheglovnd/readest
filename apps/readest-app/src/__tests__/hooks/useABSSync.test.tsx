@@ -28,6 +28,7 @@ import { useABSServerStore } from '@/store/absServerStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { eventDispatcher } from '@/utils/event';
 import { useABSSync } from '@/hooks/useABSSync';
+import { publishReplicaUpsert } from '@/services/sync/replicaPublish';
 
 const mockedSync = vi.mocked(syncAllAbsServers);
 const mockedBackfill = vi.mocked(backfillAbsCovers);
@@ -160,6 +161,26 @@ describe('useABSSync', () => {
     });
 
     expect(mockedSync).toHaveBeenCalledTimes(1);
+  });
+
+  test('only explicit Sync Now republishes the full server after unlocking credentials', async () => {
+    const withCredentials = { ...server, password: 'test-password', accessToken: 'test-token' };
+    useABSServerStore.setState({ servers: [withCredentials] });
+    useSettingsStore.setState({ settings: makeSettings({ absServers: [withCredentials] }) });
+    mockedSync.mockResolvedValue();
+    renderHook(() => useABSSync());
+    await settle();
+    expect(publishReplicaUpsert).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await eventDispatcher.dispatch('sync-abs-servers');
+    });
+    expect(publishReplicaUpsert).toHaveBeenCalledExactlyOnceWith(
+      'abs_server',
+      withCredentials,
+      withCredentials.contentId,
+      withCredentials.reincarnation,
+    );
   });
 
   test('unmount clears the interval', async () => {

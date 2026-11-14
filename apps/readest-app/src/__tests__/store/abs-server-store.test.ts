@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { findABSServerById, isAbsBookOrphaned, useABSServerStore } from '@/store/absServerStore';
 import { useSettingsStore } from '@/store/settingsStore';
+import { publishReplicaUpsert } from '@/services/sync/replicaPublish';
 import { computeAbsServerContentId } from '@/services/sync/adapters/absServer';
 import { makeAbsFilePath } from '@/utils/audiobook';
 import type { ABSServer } from '@/types/audiobookshelf';
@@ -116,6 +117,95 @@ describe('absServerStore', () => {
     const merged = useABSServerStore.getState().findByContentId(local.contentId!);
     expect(merged?.id).toBe(local.id);
     expect(merged?.lastSyncedAt).toBe(4242);
+  });
+
+  describe('publishing server updates', () => {
+    let server: ABSServer;
+
+    beforeEach(() => {
+      server = useABSServerStore.getState().addServer({
+        name: 'Home',
+        url: 'https://abs.example.test',
+        addedAt: 1,
+        username: 'reader',
+        password: 'test-password',
+        accessToken: 'test-token',
+        refreshToken: 'test-refresh',
+        libraryIds: ['library-1'],
+      });
+      vi.mocked(publishReplicaUpsert).mockClear();
+    });
+
+    it('keeps routine sync timestamps local', () => {
+      const updated = useABSServerStore.getState().updateServer(server.id, { lastSyncedAt: 123 });
+      expect(updated?.lastSyncedAt).toBe(123);
+      expect(publishReplicaUpsert).not.toHaveBeenCalled();
+    });
+
+    it('does not republish unchanged values or equivalent library selections', () => {
+      useABSServerStore.getState().updateServer(server.id, {
+        name: server.name,
+        password: server.password,
+        libraryIds: ['library-1'],
+      });
+      expect(publishReplicaUpsert).not.toHaveBeenCalled();
+    });
+
+    it('publishes only changed metadata and leaves credentials untouched', () => {
+      const updated = useABSServerStore
+        .getState()
+        .updateServer(server.id, { libraryIds: ['library-2'], lastSyncedAt: 123 });
+      expect(publishReplicaUpsert).toHaveBeenCalledExactlyOnceWith(
+        'abs_server',
+        updated,
+        server.contentId,
+        server.reincarnation,
+        ['libraryIds'],
+      );
+    });
+
+    it('publishes a changed password without rotating other credentials', () => {
+      const updated = useABSServerStore
+        .getState()
+        .updateServer(server.id, { password: 'new-test-password' });
+      expect(publishReplicaUpsert).toHaveBeenCalledExactlyOnceWith(
+        'abs_server',
+        updated,
+        server.contentId,
+        server.reincarnation,
+        ['password'],
+      );
+    });
+
+    it('publishes rotated tokens without resending an unchanged password', () => {
+      const updated = useABSServerStore.getState().updateServer(server.id, {
+        accessToken: 'new-test-token',
+        refreshToken: 'new-test-refresh',
+        serverVersion: '2.32.1',
+      });
+      expect(publishReplicaUpsert).toHaveBeenCalledExactlyOnceWith(
+        'abs_server',
+        updated,
+        server.contentId,
+        server.reincarnation,
+        ['accessToken', 'refreshToken', 'serverVersion'],
+      );
+    });
+
+    it('publishes a complete server when its URL creates a new replica identity', () => {
+      const updated = useABSServerStore
+        .getState()
+        .updateServer(server.id, { url: 'https://other.example.test' });
+      const call = vi.mocked(publishReplicaUpsert).mock.calls[0];
+      expect(call?.slice(0, 4)).toEqual([
+        'abs_server',
+        updated,
+        updated?.contentId,
+        server.reincarnation,
+      ]);
+      expect(call?.[4]).toBeUndefined();
+      expect(updated?.password).toBe('test-password');
+    });
   });
 
   it('removeServer soft-deletes and getAvailableServers filters tombstones', () => {

@@ -22,6 +22,7 @@ export const publishReplicaUpsert = async <T>(
   record: T,
   contentId: string,
   reincarnation?: string,
+  fieldsToPublish?: readonly string[],
 ): Promise<void> => {
   if (!isSyncCategoryEnabled(kind)) return;
   const ctx = getReplicaSync();
@@ -32,6 +33,13 @@ export const publishReplicaUpsert = async <T>(
   if (!userId) return;
 
   const packed = adapter.pack(record);
+  // Patch only selected packed fields before encryption so metadata updates
+  // cannot rotate unchanged credential ciphertexts. Omitted means full upsert.
+  if (fieldsToPublish) {
+    for (const key of Object.keys(packed)) {
+      if (!fieldsToPublish.includes(key)) delete packed[key];
+    }
+  }
   // Credentials meta-toggle (default OFF): when the user hasn't opted
   // into syncing sensitive fields, drop adapter.encryptedFields from
   // the packed object before the crypto middleware ever sees them. No
@@ -50,6 +58,7 @@ export const publishReplicaUpsert = async <T>(
   // Encrypts the remaining encryptedFields in place. Locked session →
   // those fields are dropped from the push (sync without creds).
   await encryptPackedFields(packed, adapter.encryptedFields);
+  if (fieldsToPublish && Object.keys(packed).length === 0) return;
   let fields: FieldsObject = {};
   let maxFieldHlc: Hlc | null = null;
   for (const [key, value] of Object.entries(packed)) {
