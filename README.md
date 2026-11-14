@@ -36,6 +36,10 @@ over HTTPS, without uploading a second server-side copy of every book.
   On Android, held buttons scroll smoothly between repeats and stop on release
   without queuing a backlog.
 
+- **Longer reading visits:** web and native clients retain up to ten minutes per
+  page visit and pause after ten minutes without a reading-position update.
+  Existing statistics are preserved.
+
 See [filesystem library setup, configuration and tests](docker/local-library/README.md).
 See [native custom-server setup and volume-key behavior](apps/readest-app/docs/native-custom-server.md).
 The `homelab` branch starts from upstream Readest 0.12.20 at

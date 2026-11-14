@@ -15,8 +15,24 @@ describe('TrackerCore', () => {
   it('caps duration at maxEventSeconds', () => {
     const t = new TrackerCore(cfg);
     t.onPage(1, 10, 0);
-    const out = t.onPage(2, 10, 10_000); // way over the 120s cap
+    const out = t.onPage(2, 10, 10_000); // way over the configured cap
     expect(out[0]!.duration).toBe(cfg.maxEventSeconds);
+  });
+
+  it('retains a five-minute page visit with the default limits', () => {
+    const t = new TrackerCore(cfg);
+    t.onPage(1, 10, 1000);
+    expect(t.onPage(2, 10, 1300)).toEqual([
+      { page: 1, startTime: 1000, duration: 300, totalPages: 10 },
+    ]);
+  });
+
+  it('caps a repeatedly scrolled location at ten minutes from its original start', () => {
+    const t = new TrackerCore(cfg);
+    t.onPage(1, 10, 1000);
+    expect(t.onPage(1, 10, 1300)).toEqual([]);
+    expect(t.onPage(1, 10, 1599)).toEqual([]);
+    expect(t.onClose(1700)).toEqual([{ page: 1, startTime: 1000, duration: 600, totalPages: 10 }]);
   });
 
   it('drops sub-minimum events', () => {

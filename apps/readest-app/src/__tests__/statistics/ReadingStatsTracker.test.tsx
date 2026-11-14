@@ -121,6 +121,39 @@ describe('ReadingStatsTracker while TTS plays', () => {
     expect(mocks.db.insertPageEvent).toHaveBeenCalled();
   });
 
+  it('keeps a five-minute visit active and saves its full duration on a page change', async () => {
+    const { rerender } = mount();
+    await settle();
+    await settle(300_000);
+    expect(mocks.db.insertPageEvent).not.toHaveBeenCalled();
+
+    setPage(1);
+    rerender(<ReadingStatsTracker bookKey={BOOK_KEY} />);
+    await settle();
+    expect(mocks.db.insertPageEvent).toHaveBeenCalledTimes(1);
+    expect(mocks.db.insertPageEvent).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ page: 1, duration: 300 }),
+    );
+  });
+
+  it('pauses after ten minutes of inactivity without double-counting on close', async () => {
+    const { unmount } = mount();
+    await settle();
+    await settle(599_000);
+    expect(mocks.db.insertPageEvent).not.toHaveBeenCalled();
+
+    await settle(1000);
+    expect(mocks.db.insertPageEvent).toHaveBeenCalledTimes(1);
+    expect(mocks.db.insertPageEvent).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ page: 1, duration: 600 }),
+    );
+    unmount();
+    await settle();
+    expect(mocks.db.insertPageEvent).toHaveBeenCalledTimes(1);
+  });
+
   it('stops recording page dwell while TTS is playing', async () => {
     const { rerender } = mount();
     await settle();

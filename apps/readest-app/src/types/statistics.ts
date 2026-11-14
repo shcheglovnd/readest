@@ -31,7 +31,7 @@ export interface StatsTrackingConfig {
 }
 
 export const DEFAULT_STATS_TRACKING_CONFIG: StatsTrackingConfig = {
-  idleTimeoutSeconds: 120,
-  maxEventSeconds: 120,
+  idleTimeoutSeconds: 600,
+  maxEventSeconds: 600,
   minEventSeconds: 3,
 };
