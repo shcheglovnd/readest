@@ -55,6 +55,7 @@ vi.mock('@readest/turso-database-wasm/webpack', () => {
   const rows = new Map<string, DatabaseRow[]>();
 
   const mockDb = {
+    ioStep: vi.fn(async () => {}),
     prepare: vi.fn((sql: string) => ({
       run: vi.fn((...params: unknown[]) => {
         const table = sql.match(/INTO\s+(\w+)/i)?.[1] ?? '_default';

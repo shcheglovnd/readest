@@ -43,6 +43,10 @@ over HTTPS, without uploading a second server-side copy of every book.
   page visit and pause after ten minutes without a reading-position update.
   Existing statistics are preserved.
 
+- **Reliable browser statistics sync:** large history downloads can resume when
+  the browser database misses an I/O wakeup, preserving its normal sync and
+  offline statistics without changing the native clients.
+
 - **Quiet Audiobookshelf credential sync:** routine reading-library checks keep
   their sync timestamps local. Metadata edits and token rotations publish only
   changed fields, preserving unchanged credential ciphertext across web reloads.

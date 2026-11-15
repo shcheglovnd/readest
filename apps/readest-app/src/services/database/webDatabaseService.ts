@@ -11,6 +11,7 @@ interface WasmStatement {
 }
 
 interface WasmDatabase {
+  ioStep: () => Promise<void>;
   // Turso's `Database.prepare()` was made async in @readest/turso-database-common
   // (commit a30b6ded4). It still resolves synchronously today, but the package
   // notes the underlying impl may become truly async — accept either shape and
@@ -30,6 +31,24 @@ export class WebDatabaseService implements DatabaseService {
   static async open(path: string, opts?: DatabaseOpts): Promise<WebDatabaseService> {
     const mod = await import('@readest/turso-database-wasm/webpack');
     const db = (await mod.connect(path, opts)) as unknown as WasmDatabase;
+    // A missed OPFS completion notice can leave Turso's retryable I/O step
+    // asleep forever during bulk writes. Keep normal wakeups immediate, but
+    // periodically let the stepper check again. Share the outstanding notice
+    // so retries do not accumulate notification waiters in the binding.
+    const ioStep = db.ioStep.bind(db);
+    let pending: Promise<void> | undefined;
+    db.ioStep = () => {
+      const notification = (pending ??= ioStep().finally(() => {
+        pending = undefined;
+      }));
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      return Promise.race([
+        notification,
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, 50);
+        }),
+      ]).finally(() => clearTimeout(timer));
+    };
     return new WebDatabaseService(db);
   }
 
