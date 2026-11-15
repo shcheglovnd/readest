@@ -18,10 +18,15 @@ normal Readest authentication, sync database and auxiliary object storage.
 - The indexer mirrors relative directories into Readest's existing nested Groups
   view. Empty directories are omitted. Group edits in Readest do not move files;
   the next scan restores the filesystem's grouping.
-- Each physical path has its own book ID and reading state, including identical
-  copies and PDFs whose embedded annotations differ. Rename detection preserves
-  established IDs when the original path disappears. Files are never rewritten
-  to obtain a distinct ID. Manual browser imports retain upstream deduplication.
+- The indexer prevents new bookshelf entries for byte-identical copies, using the
+  full-file SHA-256 rather than Readest's sampled hash. PDFs whose embedded
+  annotations differ remain separate, even if their sampled hashes collide.
+  Existing entries, IDs and reading history are preserved; existing duplicates
+  are not merged. Copies of a previously deleted book do not create a new entry.
+- Per-path identities remain in the catalog for tracking renames and file edits.
+  Skipped copies stay on disk, without another bookshelf entry or a new group.
+  The established entry keeps its exact source binding and folder. Files are
+  never rewritten. Manual browser imports retain upstream deduplication.
 - Removed or edited originals require a rescan; unavailable references fail rather
   than returning a different physical copy. Existing client downloads may need a
   new download after an external edit. Missing sources do not delete user records.
@@ -130,6 +135,8 @@ git submodule update --init packages/foliate-js packages/simplecc-wasm \
    prevents overlapping scans. Reports go to the private state's `audit/`
    directory. Source files are read only by the indexer; book bytes are registered
    through the normal API without uploading them again. Covers use signed uploads.
+   Reports include `duplicate_sources_skipped` when new byte-identical copies
+   were suppressed. Existing independent entries continue to be processed normally.
    Select **Groups** in Readest to browse the mirrored directory structure.
 
 ## Existing installations and backups

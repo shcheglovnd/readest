@@ -141,6 +141,15 @@ def publish(catalog, sources, restore_hashes=()):
     session, owner, _ = login()
     current = api(session, 'GET', '/api/sync?type=books&since=0')['books'] or []
     known = {b['book_hash']: b for b in current}
+    # Keep established identities/history, including tombstones. Only a new
+    # bookshelf entry is rejected when its complete bytes are already known.
+    with catalog.connect() as db:
+        represented = {r['sha256'] for r in db.execute('SELECT sha256,book_hash FROM sources')
+                       if r['book_hash'] in known}
+        for reference in db.execute('SELECT file_key,sha256 FROM objects'):
+            parsed = book_key(reference['file_key'])
+            if parsed and parsed[0] == owner and parsed[1] in known and reference['sha256']:
+                represented.add(reference['sha256'])
     counts = Counter()
     missing_restores = set(restore_hashes) - {source['hash'] for source in sources}
     if missing_restores:
@@ -160,6 +169,9 @@ def publish(catalog, sources, restore_hashes=()):
                     counts['folder_groups_updated'] += 1
             counts['existing_or_deleted'] += 1
             continue  # Never overwrite user edits, progress or bookshelf deletions.
+        if source['sha256'] in represented:
+            counts['duplicate_sources_skipped'] += 1
+            continue
         path = Path(source['path'])
         title, author, metadata, cover, pages = legacy.metadata(path)
         now = int(time.time() * 1000)
@@ -181,6 +193,7 @@ def publish(catalog, sources, restore_hashes=()):
             book.update({'coverHash': legacy.partial_md5(cover), 'coverUpdatedAt': now})
         api(session, 'POST', '/api/sync', json={'books': [book]})
         known[identity] = book
+        represented.add(source['sha256'])
         counts['new_entries'] += 1
     return dict(counts)
 

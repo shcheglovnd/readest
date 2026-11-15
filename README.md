@@ -8,11 +8,12 @@ over HTTPS, without uploading a second server-side copy of every book.
   Readest's object-storage boundary. Covers and auxiliary assets keep their normal
   object store; authentication, annotations, progress and statistics keep the
   existing Readest backend.
-- **Folders and independent files:** a periodic indexer mirrors directories into
-  native nested Groups. Each physical file gets its own entry, including identical
-  copies and PDFs with different embedded notes. Established IDs survive recognized
-  renames; originals are not rewritten. Configurable roots and exclusions limit
-  what appears in the reader.
+- **Folders and duplicate prevention:** a periodic indexer mirrors directories into
+  native nested Groups. Full-file SHA-256 checks prevent new bookshelf entries for
+  byte-identical copies; PDFs with different embedded notes remain separate.
+  Existing entries and history are preserved, including prior deletions.
+  Established IDs survive recognized renames; originals are not rewritten.
+  Configurable roots and exclusions limit what appears in the reader.
 - **Safe uploads and deletion:** uploads finish atomically in a storage inbox.
   Normal bookshelf deletion removes the selected HDD original; device-only removal
   keeps it. Other physical copies and hardlinks are preserved. Reading data and
