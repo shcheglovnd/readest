@@ -14,8 +14,10 @@ over HTTPS, without uploading a second server-side copy of every book.
   renames; originals are not rewritten. Configurable roots and exclusions limit
   what appears in the reader.
 - **Safe uploads and deletion:** uploads finish atomically in a storage inbox.
-  Bookshelf deletion leaves originals on disk, and scans respect deleted entries.
-  An explicit restore command re-adds an entry while retaining its reading history.
+  Normal bookshelf deletion removes the selected HDD original; device-only removal
+  keeps it. Other physical copies and hardlinks are preserved. Reading data and
+  source identities remain available for an explicit restore, and scans respect
+  deleted entries. Previously hidden books are not removed retroactively.
 - **Offline PWA:** Docker uses the existing Serwist webpack integration, caches
   startup pages/configuration/WASM, and retains the local login offline. Download
   books online before reading offline.

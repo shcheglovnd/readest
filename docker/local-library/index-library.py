@@ -12,7 +12,7 @@ import time
 import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from catalog import Catalog, digest_file
+from catalog import Catalog, book_key, digest_file
 from readest_local import BASE, ORIGIN, api, env, login
 import book_metadata as legacy
 
@@ -63,7 +63,9 @@ def scan(catalog, state, full=False):
             continue
         info = path.stat()
         previous = catalog.source(path)
-        if not full and previous and previous['size'] == info.st_size and previous['mtime_ns'] == info.st_mtime_ns:
+        if (not full and previous and previous['size'] == info.st_size and
+            previous['mtime_ns'] == info.st_mtime_ns and previous['device'] == info.st_dev and
+            previous['inode'] == info.st_ino):
             checksum = previous['sha256']
             identity = previous['book_hash']
         else:
@@ -73,7 +75,16 @@ def scan(catalog, state, full=False):
             old = state.get(str(path))
             with catalog.connect() as db:
                 candidates = db.execute('SELECT * FROM sources WHERE sha256=?', (checksum,)).fetchall()
-            moved = [r for r in candidates if r['path'] != str(path) and not Path(r['path']).exists()]
+                references = db.execute('SELECT * FROM objects WHERE sha256=?', (checksum,)).fetchall()
+            moved = []
+            for candidate in candidates:
+                if candidate['path'] == str(path) or Path(candidate['path']).exists():
+                    continue
+                refs = [r for r in references if r['source_path'] == candidate['path'] or
+                        (r['source_path'] is None and book_key(r['file_key'])[1] == candidate['book_hash'])]
+                if refs and not any(r['enabled'] for r in refs):
+                    continue  # An intentionally deleted alias is not a rename.
+                moved.append(candidate)
             inode_match = next((r for r in moved if r['device'] == info.st_dev and r['inode'] == info.st_ino), None)
             renamed = inode_match or (moved[0] if len(moved) == 1 else None)
             if previous:
@@ -194,10 +205,11 @@ def main():
     statefile = BASE / 'private/import-state.json'
     state = json.loads(statefile.read_text()) if statefile.exists() else {}
     catalog = Catalog(DATABASE, ROOTS, EXCLUDED)
-    sources, invalid = scan(catalog, state, args.full_hash)
-    report = {'time': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
-              'source_files': len(sources), 'invalid_sources': invalid}
-    report.update(publish(catalog, sources, args.restore))
+    with catalog.filesystem_lock():
+        sources, invalid = scan(catalog, state, args.full_hash)
+        report = {'time': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+                  'source_files': len(sources), 'invalid_sources': invalid}
+        report.update(publish(catalog, sources, args.restore))
     (BASE / 'audit/library-index-latest.json').write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n')
     print(json.dumps(report), flush=True)
 

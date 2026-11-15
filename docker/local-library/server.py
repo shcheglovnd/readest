@@ -1,4 +1,4 @@
-"""Private storage RPC plus expiring browser transfers. Originals are read-only."""
+"""Private storage RPC plus expiring browser transfers and owned-file deletion."""
 import asyncio
 import base64
 import hashlib
@@ -11,7 +11,7 @@ import secrets
 import time
 
 from aiohttp import web
-from catalog import Catalog, book_key, digest_file
+from catalog import Catalog, SourceChangedError, book_key, digest_file
 
 
 def create_app(database, roots, inbox, secret, origin, exclusions=(), owner_id=None):
@@ -48,6 +48,8 @@ def create_app(database, roots, inbox, secret, origin, exclusions=(), owner_id=N
             raise web.HTTPNotFound(text='Original unavailable; check storage and rescan') from None
         except PermissionError:
             raise web.HTTPForbidden(text='Library path denied') from None
+        except SourceChangedError:
+            raise web.HTTPConflict(text='Original changed; rescan before deletion') from None
         except ValueError:
             raise web.HTTPBadRequest(text='Invalid storage request') from None
 
@@ -68,7 +70,7 @@ def create_app(database, roots, inbox, secret, origin, exclusions=(), owner_id=N
                 raise web.HTTPBadRequest(text='Invalid upload length')
             return web.json_response({'url': sign('PUT', key, size, data.get('expiresIn', 1800))})
         if operation == 'delete':
-            catalog.detach(key)  # A bookshelf deletion never deletes an HDD original.
+            await asyncio.to_thread(catalog.delete_original, key, owner_id, inbox)
             return web.json_response({'ok': True})
         if operation == 'exists':
             try:

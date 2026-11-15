@@ -3,10 +3,13 @@ import asyncio
 import hashlib
 import hmac
 import json
+import fcntl
+import os
 from pathlib import Path
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 from aiohttp.test_utils import TestClient, TestServer
 from catalog import Catalog, digest_file
@@ -31,7 +34,9 @@ class StorageAcceptance(unittest.IsolatedAsyncioTestCase):
         self.catalog = Catalog(database, [self.books])
         self.catalog.add_source(self.original, digest_file(self.original), 'a' * 32)
         self.catalog.bind(KEY, digest_file(self.original))
-        self.client = TestClient(TestServer(create_app(database, [self.books], self.inbox, SECRET, 'http://example.test')))
+        self.database = database
+        self.owner = KEY.split('/')[0]
+        self.client = TestClient(TestServer(create_app(database, [self.books], self.inbox, SECRET, 'http://example.test', owner_id=self.owner)))
         await self.client.start_server()
 
     async def asyncTearDown(self):
@@ -109,10 +114,134 @@ class StorageAcceptance(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.catalog.resolve(KEY), self.original)
         self.assertTrue(copy.exists())
 
-    async def test_delete_revokes_link_but_preserves_original(self):
+    async def test_delete_removes_original_and_preserves_identity_for_restore(self):
         link = await self.link()
         self.assertEqual((await self.rpc('delete')).status, 200)
         self.assertEqual((await self.client.get(link)).status, 404)
+        self.assertFalse(self.original.exists(), 'Deleting a server book must remove its HDD original')
+        self.assertEqual(self.catalog.source(self.original)['book_hash'], 'a' * 32)
+
+    async def test_delete_requires_the_private_rpc_secret(self):
+        response = await self.client.post('/v1/delete', json={'fileKey': KEY})
+        self.assertEqual(response.status, 403)
+        self.assertEqual(self.original.read_bytes(), self.content)
+
+    async def test_delete_waits_for_the_indexer_filesystem_lock(self):
+        with (self.database.parent / 'filesystem.lock').open('a') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            request = asyncio.create_task(self.rpc('delete'))
+            try:
+                await asyncio.sleep(0.05)
+                self.assertFalse(request.done(), 'Deletion must wait until the scanner publishes its mapping')
+                self.assertTrue(self.original.exists())
+            finally:
+                fcntl.flock(lock, fcntl.LOCK_UN)
+                response = await asyncio.wait_for(request, 5)
+        self.assertEqual(response.status, 200)
+        self.assertFalse(self.original.exists())
+
+    async def test_delete_only_removes_the_exact_copy_or_hardlink(self):
+        other = self.books / 'other.pdf'
+        other.write_bytes(self.content)
+        hardlink = self.books / 'hardlink.pdf'
+        os.link(self.original, hardlink)
+        self.catalog.bind(KEY, digest_file(self.original), path=self.original)
+        for path, identity in [(other, 'b' * 32), (hardlink, 'c' * 32)]:
+            self.catalog.add_source(path, digest_file(path), identity)
+            self.catalog.bind(KEY.replace('a' * 32, identity), digest_file(path), path=path)
+        self.assertEqual((await self.rpc('delete')).status, 200)
+        self.assertFalse(self.original.exists(), 'Only the selected original should be unlinked')
+        self.assertEqual(other.read_bytes(), self.content)
+        self.assertEqual(hardlink.read_bytes(), self.content)
+        self.assertEqual(self.catalog.resolve(KEY.replace('a' * 32, 'b' * 32)), other)
+        self.assertEqual(self.catalog.resolve(KEY.replace('a' * 32, 'c' * 32)), hardlink)
+
+    async def test_repeated_delete_does_not_remove_a_new_file_at_the_old_path(self):
+        self.catalog.bind(KEY, digest_file(self.original), path=self.original)
+        self.assertEqual((await self.rpc('delete')).status, 200)
+        self.assertFalse(self.original.exists())
+        self.original.write_bytes(b'a new unrelated book')
+        self.assertEqual((await self.rpc('delete')).status, 200)
+        self.assertEqual(self.original.read_bytes(), b'a new unrelated book')
+
+    async def test_old_detached_reference_does_not_delete_original_retroactively(self):
+        self.catalog.detach(KEY)
+        self.assertEqual((await self.rpc('delete')).status, 200)
+        self.assertEqual(self.original.read_bytes(), self.content)
+
+    async def test_delete_missing_original_never_deletes_an_identical_copy(self):
+        self.catalog.bind(KEY, digest_file(self.original), path=self.original)
+        other = self.books / 'other.pdf'
+        other.write_bytes(self.content)
+        self.catalog.add_source(other, digest_file(other), 'b' * 32)
+        self.original.unlink()
+        self.assertEqual((await self.rpc('delete')).status, 200)
+        self.assertEqual(other.read_bytes(), self.content)
+
+    async def test_delete_refuses_a_replacement_not_yet_seen_by_indexer(self):
+        self.catalog.bind(KEY, digest_file(self.original), path=self.original)
+        replacement = self.books / 'replacement.pdf'
+        replacement.write_bytes(self.content)
+        replacement.replace(self.original)
+        self.assertEqual((await self.rpc('delete')).status, 409)
+        self.assertEqual(self.original.read_bytes(), self.content)
+        self.assertTrue(self.catalog.reference(KEY)['enabled'])
+
+    async def test_delete_refuses_symlinks_even_inside_the_allowed_root(self):
+        self.catalog.bind(KEY, digest_file(self.original), path=self.original)
+        other = self.books / 'other.pdf'
+        other.write_bytes(self.content)
+        self.original.unlink()
+        self.original.symlink_to(other)
+        self.assertEqual((await self.rpc('delete')).status, 403)
+        self.assertEqual(other.read_bytes(), self.content)
+        self.assertTrue(self.catalog.reference(KEY)['enabled'])
+
+    async def test_delete_refuses_parent_symlink_escape(self):
+        folder = self.books / 'nested'
+        folder.mkdir()
+        original = folder / 'book.pdf'
+        original.write_bytes(self.content)
+        self.catalog.add_source(original, digest_file(original), 'a' * 32)
+        self.catalog.bind(KEY, digest_file(original), path=original)
+        outside = self.base / 'outside'
+        folder.rename(outside)
+        folder.symlink_to(outside, target_is_directory=True)
+        self.assertEqual((await self.rpc('delete')).status, 403)
+        self.assertEqual((outside / 'book.pdf').read_bytes(), self.content)
+
+    async def test_delete_cannot_reach_a_newly_excluded_path(self):
+        self.catalog.bind(KEY, digest_file(self.original), path=self.original)
+        client = TestClient(TestServer(create_app(self.database, [self.books], self.inbox, SECRET, 'http://example.test', exclusions=[self.books], owner_id=self.owner)))
+        async with client:
+            response = await client.post('/v1/delete', headers={'Authorization': 'Bearer ' + SECRET}, json={'fileKey': KEY})
+            self.assertEqual(response.status, 403)
+        self.assertEqual(self.original.read_bytes(), self.content)
+
+    async def test_delete_permission_failure_keeps_reference_for_retry(self):
+        self.catalog.bind(KEY, digest_file(self.original), path=self.original)
+        with patch('os.unlink', side_effect=PermissionError('test permission denial')):
+            self.assertEqual((await self.rpc('delete')).status, 403)
+        self.assertEqual(self.original.read_bytes(), self.content)
+        self.assertTrue(self.catalog.reference(KEY)['enabled'])
+
+    async def test_shared_book_receiver_only_deletes_their_reference(self):
+        other = KEY.replace(self.owner, '22222222-2222-2222-2222-222222222222')
+        self.assertEqual((await self.rpc('copy', destFileKey=other)).status, 200)
+        self.assertEqual((await self.rpc('delete', fileKey=other)).status, 200)
+        self.assertEqual(self.original.read_bytes(), self.content)
+        self.assertTrue(self.catalog.reference(KEY)['enabled'])
+        self.assertFalse(self.catalog.reference(other)['enabled'])
+
+    async def test_secondary_account_can_delete_its_own_inbox_upload(self):
+        other = KEY.replace(self.owner, '22222222-2222-2222-2222-222222222222').replace('a' * 32, 'd' * 32)
+        content = self.content + b'secondary upload'
+        link = await self.link('upload', fileKey=other, contentLength=len(content))
+        self.assertEqual((await self.client.put(link, data=content)).status, 200)
+        uploaded = self.catalog.resolve(other)
+        self.assertTrue(uploaded.is_relative_to(self.inbox / '.users' / other.split('/')[0]))
+        self.assertEqual((await self.rpc('delete', fileKey=other)).status, 200)
+        self.assertFalse(uploaded.exists())
         self.assertEqual(self.original.read_bytes(), self.content)
 
     async def test_missing_original_never_falls_back_to_a_copy(self):

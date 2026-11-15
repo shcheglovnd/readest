@@ -38,17 +38,17 @@ services:
       - type: bind
         source: ${LIBRARY_STORAGE_ROOT:?Set the storage mount}/books
         target: ${LIBRARY_STORAGE_ROOT}/books
-        read_only: true
+        read_only: false
         bind: {create_host_path: false}
       - type: bind
         source: ${LIBRARY_STORAGE_ROOT}/education
         target: ${LIBRARY_STORAGE_ROOT}/education
-        read_only: true
+        read_only: false
         bind: {create_host_path: false}
       - type: bind
         source: ${LIBRARY_STORAGE_ROOT}/media/books
         target: ${LIBRARY_STORAGE_ROOT}/media/books
-        read_only: true
+        read_only: false
         bind: {create_host_path: false}
       - type: bind
         source: ${LIBRARY_STORAGE_ROOT}/books/Readest Inbox

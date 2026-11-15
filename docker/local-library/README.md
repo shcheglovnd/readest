@@ -25,9 +25,16 @@ normal Readest authentication, sync database and auxiliary object storage.
 - Removed or edited originals require a rescan; unavailable references fail rather
   than returning a different physical copy. Existing client downloads may need a
   new download after an external edit. Missing sources do not delete user records.
-- Deleting a bookshelf entry disables its reference and preserves its original.
-  Scans honor bookshelf deletions. `--restore BOOK_HASH` explicitly restores an
-  existing deleted entry with its established ID and reading history.
+- Normal bookshelf deletion removes the selected original from server storage.
+  The existing **Remove from Device Only** action removes only the client download.
+  Deletion targets the exact cataloged path, preserving other physical copies and
+  hardlinks. A share recipient can remove their reference but cannot delete the
+  sender's original. Accounts can delete their own private inbox uploads.
+- Deletion retains source identity and reading data. Scans honor bookshelf
+  deletions; `--restore BOOK_HASH` explicitly restores an entry after its original
+  has been restored to disk. Previously detached entries are not deleted from
+  disk retroactively. Files changed or replaced since indexing must be rescanned
+  before deletion. The indexer and deletion handler share a filesystem lock.
 - Browser uploads publish complete files atomically into `Readest Inbox`, with
   size checks and no overwriting. Other accounts' uploads go into hidden `.users`
   directories, excluded from the owner's scanner. The inbox filesystem must
@@ -67,8 +74,10 @@ git submodule update --init packages/foliate-js packages/simplecc-wasm \
    `mount_point`. The mount guard makes scans fail when a storage mount is absent.
    Match the paths and exclusions in the sidecar's environment. The indexer and
    storage container must see originals at **the same absolute paths**. Ensure UID
-   1000 can read originals and write the catalog/inbox; adjust the example UID if
-   needed. Other original paths are mounted read-only.
+   1000 can read originals and write their containing directories, the catalog
+   and inbox; adjust the example UID if needed. The configured roots are writable
+   so deletion can unlink originals. The container root filesystem stays read-only;
+   exclusions and symlink restrictions continue to apply.
 
 2. Add `compose.example.yaml` as an override to the upstream stack. Set
    `LIBRARY_STORAGE_ROOT`, `READEST_STATE_DIR`, `LIBRARY_OWNER` (the Readest account
@@ -135,8 +144,8 @@ verified separately.
 
 Back up Readest's Postgres data, private configuration, auxiliary object storage,
 and the catalog using SQLite's online backup API. The catalog and database must
-describe the same library. Back up original books separately. This adapter never
-deletes originals. Restoring an old catalog/database can discard newer reading
+describe the same library. Back up original books separately: normal bookshelf
+deletion now removes originals. Restoring an old catalog/database can discard newer reading
 state; updating the fork does not require replacing either.
 
 ## PWA changes included in the fork
