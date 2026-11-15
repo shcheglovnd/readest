@@ -4,18 +4,36 @@ import { useEnv } from '@/context/EnvContext';
 import { Book } from '@/types/book';
 import { getUserLang } from '@/utils/misc';
 import { isWebAppPlatform } from '@/services/environment';
-import { demoLibraries as libraries } from '@/services/demoBooks';
+import { demoLibraries as libraries, isDemoBook } from '@/services/demoBooks';
+import { getRuntimeConfig } from '@/services/runtimeConfig';
+import { useLibraryStore } from '@/store/libraryStore';
 
 interface DemoBooks {
   library: string[];
 }
 
 export const useDemoBooks = () => {
-  const { envConfig } = useEnv();
+  const { envConfig, appService } = useEnv();
+  const libraryLoaded = useLibraryStore((state) => state.libraryLoaded);
   const [books, setBooks] = useState<Book[]>([]);
   const isLoading = useRef(false);
 
   useEffect(() => {
+    if (!getRuntimeConfig()?.selfHosted || !libraryLoaded || !appService) return;
+    const { library, setLibrary } = useLibraryStore.getState();
+    const personalBooks = library.filter((book) => !isDemoBook(book));
+    if (personalBooks.length === library.length) return;
+    // Remove the anonymous starter shelf, including cached pre-upgrade rows.
+    // Replace deliberately: routine saves retain absent rows as a merge floor.
+    // This changes local shelf metadata only; it never deletes book files.
+    setLibrary(personalBooks);
+    appService.saveLibraryBooks(personalBooks, { replace: true }).catch((error) => {
+      console.error('Failed to remove starter books:', error);
+    });
+  }, [appService, libraryLoaded]);
+
+  useEffect(() => {
+    if (getRuntimeConfig()?.selfHosted) return;
     if (isLoading.current) return;
     isLoading.current = true;
 
