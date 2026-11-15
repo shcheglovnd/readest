@@ -111,6 +111,10 @@ export type BookMetadata = {
   absMediaType?: 'podcast' | 'ebook';
   absEpisodeCount?: number;
   absDuration?: number;
+  /** Last actual ABS listening session/playback, ms epoch; 0 means no sessions. */
+  absLastListenedAt?: number;
+  /** Restored reading history; advanced automatically by subsequent reader progress. */
+  readestLastReadAt?: number;
   // The partial MD5 of an ABS ebook's file, which KOReader uses as the
   // book's id; the hash comes from the abs:// path instead (#7088).
   absFileHash?: string;

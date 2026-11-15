@@ -1,3 +1,4 @@
+import { getBookDateRead } from '@/utils/audiobook';
 import { Book, BooksGroup } from '@/types/book';
 import { BOOK_UNGROUPED_ID, BOOK_UNGROUPED_NAME } from '@/services/constants';
 import { md5Fingerprint } from '@/utils/md5';
@@ -52,20 +53,20 @@ export const generateBookshelfItems = (
     const existingGroup = groupsMap.get(mapKey);
     if (existingGroup) {
       existingGroup.books.push(book);
-      existingGroup.updatedAt = Math.max(existingGroup.updatedAt, book.updatedAt);
+      existingGroup.updatedAt = Math.max(existingGroup.updatedAt, getBookDateRead(book));
     } else {
       groupsMap.set(mapKey, {
         id: isDirectChild ? BOOK_UNGROUPED_ID : md5Fingerprint(fullGroupName),
         name: fullGroupName,
         displayName: isDirectChild ? BOOK_UNGROUPED_NAME : immediateChild,
         books: [book],
-        updatedAt: book.updatedAt,
+        updatedAt: getBookDateRead(book),
       });
     }
   }
 
   for (const group of groupsMap.values()) {
-    group.books.sort((a, b) => b.updatedAt - a.updatedAt);
+    group.books.sort((a, b) => getBookDateRead(b) - getBookDateRead(a));
   }
 
   const ungroupedGroup = groupsMap.get(BOOK_UNGROUPED_NAME);
@@ -74,7 +75,11 @@ export const generateBookshelfItems = (
     (group) => group.name !== BOOK_UNGROUPED_NAME,
   );
 
-  return [...ungroupedBooks, ...groupedBooks].sort((a, b) => b.updatedAt - a.updatedAt);
+  return [...ungroupedBooks, ...groupedBooks].sort(
+    (a, b) =>
+      ('books' in b ? b.updatedAt : getBookDateRead(b)) -
+      ('books' in a ? a.updatedAt : getBookDateRead(a)),
+  );
 };
 
 export const presentBookshelf = (

@@ -333,6 +333,31 @@ export class ABSClient {
     return this.#request<{ mediaProgress: ABSMediaProgress[] }>('/api/me');
   }
 
+  /** Read actual sessions: progress.lastUpdate also changes on manual edits. */
+  async getLastListenedAtByItem(): Promise<Map<string, number>> {
+    const result = new Map<string, number>();
+    let page = 0;
+    let numPages = 1;
+    do {
+      const history = await this.#request<{
+        numPages: number;
+        sessions: { libraryItemId: string; timeListening: number | string; updatedAt: number }[];
+      }>(`/api/me/listening-sessions?itemsPerPage=200&page=${page}`);
+      numPages = history.numPages;
+      for (const session of history.sessions) {
+        if (Number(session.timeListening) <= 0 || !Number.isFinite(Number(session.timeListening)))
+          continue;
+        if (!Number.isFinite(session.updatedAt) || session.updatedAt <= 0) continue;
+        result.set(
+          session.libraryItemId,
+          Math.max(result.get(session.libraryItemId) ?? 0, session.updatedAt),
+        );
+      }
+      page++;
+    } while (page < numPages);
+    return result;
+  }
+
   async openPlaybackSession(itemId: string, episodeId?: string): Promise<ABSPlaybackSession> {
     // Normalized here too (not just at AbsProgressSyncer's ctor) so any
     // caller that passes '' gets the same "no episode" book-level path,

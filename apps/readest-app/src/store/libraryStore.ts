@@ -146,6 +146,12 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       readingStatusUpdatedAt: statusChanged ? Date.now() : book.readingStatusUpdatedAt,
       updatedAt: Date.now(),
     };
+    if (book.metadata?.readestLastReadAt !== undefined) {
+      updatedBook.metadata = {
+        ...book.metadata,
+        readestLastReadAt: Math.max(book.metadata.readestLastReadAt, updatedBook.updatedAt),
+      };
+    }
     const newLibrary = library.slice();
     newLibrary[idx] = updatedBook;
     set({

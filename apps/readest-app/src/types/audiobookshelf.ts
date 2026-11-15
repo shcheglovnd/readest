@@ -70,6 +70,8 @@ export interface ABSEpisode {
 export interface ABSLibraryItem {
   id: string;
   mediaType: 'book' | 'podcast';
+  /** Server library creation time, in epoch milliseconds. */
+  addedAt?: number | null;
   updatedAt?: number;
   media: {
     metadata: {
@@ -105,6 +107,8 @@ export interface ABSMediaProgress {
   currentTime: number; // seconds
   duration: number; // seconds
   isFinished: boolean;
+  /** Completion event time; lastUpdate can also change on routine progress writes. */
+  finishedAt?: number | null;
   lastUpdate: number; // ms epoch
   /** Overall completion 0..1, what the ABS library UI draws its progress bar from. */
   progress?: number;

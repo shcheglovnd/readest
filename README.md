@@ -8,6 +8,14 @@ over HTTPS, without uploading a second server-side copy of every book.
   sync, even when the device already has the book metadata.
 - **Stable table of contents:** virtualized TOC rows keep their data during
   expansion and PDF thumbnail reflow, avoiding stale-index reader crashes.
+- **Reading dates:** Audiobookshelf Date Read sorting and shelf filters use
+  sessions with recorded listening time and local playback, independently of
+  import and metadata sync clocks. Restored ebook reading dates also survive
+  metadata edits and device sync, and advance when reading resumes.
+- **Audiobook completion and added dates:** finishing playback marks a book
+  Finished, and Audiobookshelf completion events sync using their own timestamp
+  so newer manual status choices survive. Date Added uses the server's library
+  date, including for existing entries; podcast episode endings keep the show open.
 - **Personal libraries:** self-hosted installations skip the anonymous starter
   books and remove cached starter entries without deleting any book files.
 - **Existing storage:** an optional filesystem service and five small hooks at

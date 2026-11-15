@@ -16,7 +16,7 @@ import type { TranslationFunc } from '@/hooks/useTranslation';
 import { stubTranslation as _ } from '@/utils/misc';
 import { SIZE_PER_LOC, SIZE_PER_TIME_UNIT } from '@/services/constants';
 import { isFeedBook } from '@/services/rss/feedBookUrl';
-import { isAbsOfflineCapable, isAudiobook } from '@/utils/audiobook';
+import { getBookDateRead, isAbsOfflineCapable, isAudiobook } from '@/utils/audiobook';
 
 /** Valid sort types for the library */
 const VALID_SORT_TYPES: LibrarySortByType[] = Object.values(LibrarySortByType);
@@ -484,7 +484,7 @@ const compareBookByKey = (
       return aAuthors.localeCompare(bAuthors, uiLanguage || navigator.language);
     }
     case LibrarySortByType.Updated:
-      return new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
+      return getBookDateRead(a) - getBookDateRead(b);
     case LibrarySortByType.Created:
       return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
     case LibrarySortByType.Format:
@@ -536,7 +536,7 @@ const compareBookByKey = (
       return aTime - bTime;
     }
     default:
-      return new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
+      return getBookDateRead(a) - getBookDateRead(b);
   }
 };
 
@@ -586,7 +586,7 @@ export const selectRecentShelfBooks = (books: Book[], count: number): Book[] => 
 };
 
 /**
- * Build a `groupName -> max(book.updatedAt)` map for all groups touched by
+ * Build a `groupName -> max(Date Read)` map for all groups touched by
  * the given books. Each book bumps both its direct group and every ancestor
  * group along its path (e.g. a book in "Literature/Fiction" also bumps
  * "Literature"), so parent groups don't sink just because their direct
@@ -595,11 +595,12 @@ export const selectRecentShelfBooks = (books: Book[], count: number): Book[] => 
 export const buildGroupNameUpdatedAt = (books: Book[]): Map<string, number> => {
   const map = new Map<string, number>();
   for (const book of books) {
-    if (!book.groupName || !book.updatedAt) continue;
+    const dateRead = getBookDateRead(book);
+    if (!book.groupName || !dateRead) continue;
     let path: string | undefined = book.groupName;
     while (path) {
       const prev = map.get(path) ?? 0;
-      if (book.updatedAt > prev) map.set(path, book.updatedAt);
+      if (dateRead > prev) map.set(path, dateRead);
       const slash = path.lastIndexOf('/');
       path = slash === -1 ? undefined : path.slice(0, slash);
     }
@@ -719,7 +720,7 @@ const createSeriesGroups = (books: Book[]): (Book | BooksGroup)[] => {
     name: seriesName,
     displayName: seriesName,
     books: seriesBooks,
-    updatedAt: Math.max(...seriesBooks.map((b) => b.updatedAt)),
+    updatedAt: Math.max(...seriesBooks.map(getBookDateRead)),
   }));
 
   return [...groups, ...ungroupedBooks];
@@ -765,7 +766,7 @@ const createAuthorGroups = (books: Book[]): (Book | BooksGroup)[] => {
     name: authorName,
     displayName: authorName,
     books: authorBooks,
-    updatedAt: Math.max(...authorBooks.map((b) => b.updatedAt)),
+    updatedAt: Math.max(...authorBooks.map(getBookDateRead)),
   }));
 
   return [...groups, ...ungroupedBooks];
@@ -804,7 +805,7 @@ const createValueGroups = (
       name,
       displayName: getDisplayKey ? getDisplayKey(name) : name,
       books: groupBooks,
-      updatedAt: Math.max(...groupBooks.map(({ updatedAt }) => updatedAt)),
+      updatedAt: Math.max(...groupBooks.map(getBookDateRead)),
     };
     if (getDisplayKey) group.localized = true;
     return group;
@@ -905,7 +906,7 @@ export const getBookSortValue = (book: Book, sortBy: LibrarySortByType): number 
       return formatAuthors(book.author, book?.primaryLanguage || 'en', true);
 
     case LibrarySortByType.Updated:
-      return book.updatedAt;
+      return getBookDateRead(book);
 
     case LibrarySortByType.Created:
       return book.createdAt;
@@ -931,7 +932,7 @@ export const getBookSortValue = (book: Book, sortBy: LibrarySortByType): number 
       return getTimeRemainingMinutes(book) ?? Infinity;
 
     default:
-      return book.updatedAt;
+      return getBookDateRead(book);
   }
 };
 
@@ -978,8 +979,8 @@ export const getGroupSortValue = (
     }
 
     case LibrarySortByType.Updated:
-      // Return the most recent updatedAt
-      return Math.max(...books.map((b) => b.updatedAt));
+      // Return the most recent reading/listening activity
+      return Math.max(...books.map(getBookDateRead));
 
     case LibrarySortByType.Created:
       // Return the most recent createdAt
@@ -1009,7 +1010,7 @@ export const getGroupSortValue = (
       return Math.min(...books.map((b) => getTimeRemainingMinutes(b) ?? Infinity));
 
     default:
-      return Math.max(...books.map((b) => b.updatedAt));
+      return Math.max(...books.map(getBookDateRead));
   }
 };
 

@@ -1,6 +1,13 @@
 import type { BookMetadata } from '@/libs/document';
 import type { ABSServer } from '@/types/audiobookshelf';
 import type { Book } from '@/types/book';
+import { getReadingDate } from '@/utils/readingDate';
+
+/** ABS audio recency comes from listening, never import or metadata edit time. */
+export const getBookDateRead = (book: Book): number =>
+  book.format === 'ABS' && (book.absMediaType ?? book.metadata?.absMediaType) !== 'ebook'
+    ? (getReadingDate(book.metadata) ?? 0)
+    : (getReadingDate(book.metadata, 'readestLastReadAt') ?? book.updatedAt);
 
 /** Scheme prefix for the synthetic filePath of an ABS streaming audiobook. */
 export const ABS_FILE_SCHEME = 'abs://';

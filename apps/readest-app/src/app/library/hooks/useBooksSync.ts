@@ -27,6 +27,7 @@ import {
 } from '@/app/library/utils/libraryUtils';
 import { getBookChangedAt, getPrimaryLanguage, pickFresherGroup } from '@/utils/book';
 import { isAudiobook, parseAbsFilePath } from '@/utils/audiobook';
+import { mergeReadingDates } from '@/utils/readingDate';
 
 const needsCoverRecovery = (books: Book[]) =>
   books.some(
@@ -321,6 +322,11 @@ export const useBooksSync = () => {
         // and the spread clears the local copy. An absent blob always means
         // "this row never had one", never "the user cleared it" (#5912).
         mergedBook.metadata = mergedBook.metadata ?? oldBook.metadata ?? matchingBook.metadata;
+        mergedBook.metadata = mergeReadingDates(
+          mergedBook.metadata,
+          oldBook.metadata,
+          matchingBook.metadata,
+        );
         return mergedBook;
       }
       return oldBook;

@@ -100,7 +100,12 @@ describe('bookshelf evaluation', () => {
     const ordinary = shelf('Ordinary');
     const inclusive = { ...shelf('Inclusive'), includeExclusiveBooks: true };
     const books: Book[] = [
-      { ...book('finished-audio'), format: 'ABS', readingStatus: 'finished' },
+      {
+        ...book('finished-audio'),
+        format: 'ABS',
+        readingStatus: 'finished',
+        metadata: { title: 'finished-audio', author: 'Author', language: '', absLastListenedAt: 1 },
+      },
       { ...book('finished-ebook'), readingStatus: 'finished' },
       { ...book('reading-audio'), format: 'ABS', readingStatus: 'reading' },
       { ...book('reading-ebook'), readingStatus: 'reading' },
@@ -140,7 +145,12 @@ describe('bookshelf evaluation', () => {
     const ordinary = shelf('Ordinary');
     const inclusive = { ...shelf('Inclusive'), includeExclusiveBooks: true };
     const books: Book[] = [
-      { ...book('finished-audio'), format: 'ABS', readingStatus: 'finished' },
+      {
+        ...book('finished-audio'),
+        format: 'ABS',
+        readingStatus: 'finished',
+        metadata: { title: 'finished-audio', author: 'Author', language: '', absLastListenedAt: 1 },
+      },
       { ...book('finished-ebook'), readingStatus: 'finished' },
       { ...book('reading-audio'), format: 'ABS', readingStatus: 'reading' },
     ];

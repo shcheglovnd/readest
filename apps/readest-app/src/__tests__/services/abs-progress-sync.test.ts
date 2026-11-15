@@ -297,6 +297,20 @@ describe('AbsProgressSyncer', () => {
   });
 
   describe('local cache', () => {
+    it('records a listening date on actual playback but not on seek or an idle pause', async () => {
+      seedBook();
+      const { localSyncer } = makeSyncer();
+      await localSyncer.begin(0, 0);
+      localSyncer.hooks().onSeek!(700);
+      localSyncer.hooks().onPause!(700);
+      expect(useLibraryStore.getState().library[0]?.metadata?.absLastListenedAt).toBeUndefined();
+      localSyncer.hooks().onTick!(715);
+      const listened = useLibraryStore.getState().library[0]?.metadata?.absLastListenedAt;
+      expect(listened).toBeGreaterThan(0);
+      localSyncer.hooks().onSeek!(1000);
+      expect(useLibraryStore.getState().library[0]?.metadata?.absLastListenedAt).toBe(listened);
+    });
+
     const seedBook = (): Book => {
       const book: Book = {
         hash: 'h1',

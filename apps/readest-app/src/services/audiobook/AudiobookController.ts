@@ -64,7 +64,8 @@ export interface AudiobookProgressHooks {
   onPause?: (positionSec: number) => void;
   onTick?: (positionSec: number) => void; // ~ every 15s while playing
   onSeek?: (positionSec: number) => void;
-  onEnd?: (positionSec: number) => void; // shutdown / natural end
+  /** completed is true only at the natural end of the final track. */
+  onEnd?: (positionSec: number, completed?: boolean) => void; // shutdown / natural end
 }
 
 export class AudiobookController extends EventTarget implements PlaybackSource {
@@ -397,7 +398,10 @@ export class AudiobookController extends EventTarget implements PlaybackSource {
     this.#clock.pause();
     this.#setState('stopped');
     this.#terminated = true;
-    this.#hooks?.onEnd?.(this.#timeline.duration);
+    this.#hooks?.onEnd?.(
+      reason === 'ended' ? this.#timeline.duration : this.#source.startAt,
+      reason === 'ended',
+    );
     queueMicrotask(() => {
       this.dispatchEvent(new CustomEvent('tts-session-ended', { detail: { reason } }));
     });

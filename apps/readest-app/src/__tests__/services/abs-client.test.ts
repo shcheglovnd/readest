@@ -60,6 +60,46 @@ describe('ABSClient', () => {
     });
   });
 
+  it('reads every listening-history page and ignores sessions with no listening', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse(200, {
+          numPages: 2,
+          sessions: [
+            { libraryItemId: 'a', timeListening: 10, updatedAt: 100 },
+            { libraryItemId: 'b', timeListening: 0, updatedAt: 900 },
+            { libraryItemId: 'a', timeListening: 0, updatedAt: 1000 },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(200, {
+          numPages: 2,
+          sessions: [
+            { libraryItemId: 'a', timeListening: '20', updatedAt: 200 },
+            { libraryItemId: 'c', timeListening: 5, updatedAt: 150 },
+            { libraryItemId: 'broken', timeListening: 'invalid', updatedAt: 300 },
+          ],
+        }),
+      );
+    expect(await client.getLastListenedAtByItem()).toEqual(
+      new Map([
+        ['a', 200],
+        ['c', 150],
+      ]),
+    );
+    expect(fetchMock.mock.calls.map((c) => c[0])).toEqual([
+      'http://abs.local:13378/api/me/listening-sessions?itemsPerPage=200&page=0',
+      'http://abs.local:13378/api/me/listening-sessions?itemsPerPage=200&page=1',
+    ]);
+  });
+
+  it('returns no invented dates for a user with no listening history', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, { numPages: 0, sessions: [] }));
+    expect(await client.getLastListenedAtByItem()).toEqual(new Map());
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('login falls back to the legacy long-lived token when accessToken is absent', async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse(200, {

@@ -1,3 +1,4 @@
+import { getBookDateRead } from '@/utils/audiobook';
 import type { Book } from '@/types/book';
 import type { BookshelfFieldKind, BookshelfOperator } from '@/types/bookshelf';
 import { stubTranslation as _ } from '@/utils/misc';
@@ -128,8 +129,12 @@ export const BOOKSHELF_FIELDS: BookshelfField[] = [
   },
   { id: 'pages', label: _('Pages'), kind: 'number', read: (b) => getBookPageCount(b) },
   { id: 'created', label: _('Date Added'), kind: 'date', read: (b) => b.createdAt },
-  // Date Read deliberately retains the library's existing updatedAt semantics.
-  { id: 'updated', label: _('Date Read'), kind: 'date', read: (b) => b.updatedAt },
+  {
+    id: 'updated',
+    label: _('Date Read'),
+    kind: 'date',
+    read: (b) => getBookDateRead(b) || undefined,
+  },
   {
     id: 'published',
     label: _('Publication date'),

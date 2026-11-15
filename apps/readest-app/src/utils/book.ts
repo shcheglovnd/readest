@@ -1,3 +1,4 @@
+import { mergeReadingDates } from '@/utils/readingDate';
 import { BookDoc, BookMetadata, CalibreCustomColumn, EXTS } from '@/libs/document';
 import {
   Book,
@@ -393,7 +394,7 @@ export const getBookWithUpdatedMetadata = (
 ): Book => {
   const updatedBook: Book = {
     ...book,
-    metadata,
+    metadata: mergeReadingDates(metadata, book.metadata),
     ...(tags ? { tags: [...tags] } : {}),
     title: formatTitle(metadata.title),
     author: formatAuthors(metadata.author),

@@ -1,3 +1,4 @@
+import { buildAbsBookMetadata } from '@/utils/audiobook';
 // Progress sync for ABS-backed audiobooks: opens/keeps a server listening
 // session in step with playback, applies the newest-wins resume rule when a
 // book is opened, and caches progress locally (in the library store and on
@@ -169,14 +170,14 @@ export class AbsProgressSyncer {
       onPause: (pos) => this.#syncListened(pos, true),
       onTick: (pos) => this.#syncListened(pos, false),
       onSeek: (pos) => this.#syncSeek(pos),
-      onEnd: (pos) => this.#end(pos),
+      onEnd: (pos, completed) => this.#end(pos, completed),
     };
   }
 
   #syncListened(pos: number, force: boolean): void {
     const timeListened = Math.min(MAX_LISTENED_SEC, Math.max(0, pos - this.#lastSyncedPosition));
     this.#lastSyncedPosition = pos;
-    this.#cacheLocally(pos, force);
+    this.#cacheLocally(pos, force, timeListened > 0);
     this.#syncSession(pos, timeListened);
   }
 
@@ -186,7 +187,7 @@ export class AbsProgressSyncer {
     this.#syncSession(pos, 0);
   }
 
-  #end(pos: number): void {
+  #end(pos: number, completed = false): void {
     if (this.#closed) return;
     this.#closed = true;
     const timeListened = Math.min(MAX_LISTENED_SEC, Math.max(0, pos - this.#lastSyncedPosition));
@@ -195,7 +196,7 @@ export class AbsProgressSyncer {
     // app may be killed, so it must not be silently dropped by the throttle
     // (see task review — pause-then-kill within the throttle window would
     // otherwise regress the resume position on next open).
-    this.#cacheLocally(pos, true);
+    this.#cacheLocally(pos, true, timeListened > 0, completed);
     if (this.#sessionId) {
       this.#reportPush(
         this.#client.closeSession(this.#sessionId, {
@@ -235,17 +236,34 @@ export class AbsProgressSyncer {
   // `force` bypasses the throttle for the points where a dropped write would
   // regress the resume position (pause, end) rather than just being a stale
   // intermediate tick.
-  #cacheLocally(pos: number, force: boolean): void {
+  #cacheLocally(pos: number, force: boolean, listened = false, completed = false): void {
     const { library, setLibrary } = useLibraryStore.getState();
     const idx = library.findIndex((b) => b.hash === this.#bookHash);
     if (idx !== -1) {
       const book = library[idx]!;
       const now = Date.now();
       const progress: [number, number] = [Math.round(pos), Math.round(this.#duration)];
-      // Bump updatedAt so Date Read sorting reflects listening activity, the
-      // same way the reader's progress saves do for regular books. Reconcile
-      // never compares updatedAt, so this cannot cause sync churn.
+      // Keep the progress LWW clock current. Listening recency is separate,
+      // so a seek or an idle pause cannot make the book look newly listened to.
       const updatedBook: Book = { ...book, progress, updatedAt: now };
+      // onEnd also flushes early shutdowns; only a confirmed natural end may
+      // finish a book. An episode never finishes its parent podcast show.
+      if (
+        completed &&
+        !this.#episodeId &&
+        book.absMediaType !== 'podcast' &&
+        book.metadata?.absMediaType !== 'podcast' &&
+        book.readingStatus !== 'finished'
+      ) {
+        updatedBook.readingStatus = 'finished';
+        updatedBook.readingStatusUpdatedAt = now;
+      }
+      if (listened) {
+        updatedBook.metadata = {
+          ...buildAbsBookMetadata(book),
+          absLastListenedAt: Math.max(book.metadata?.absLastListenedAt ?? 0, now),
+        };
+      }
       const newLibrary = library.slice();
       newLibrary[idx] = updatedBook;
       setLibrary(newLibrary);

@@ -7,6 +7,7 @@ const h = vi.hoisted(() => ({
     getLibraries: vi.fn(),
     getLibraryItems: vi.fn(),
     getMe: vi.fn(),
+    getLastListenedAtByItem: vi.fn(async () => new Map<string, number>()),
   },
 }));
 

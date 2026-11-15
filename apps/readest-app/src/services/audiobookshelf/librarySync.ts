@@ -16,6 +16,7 @@ import { md5 } from '@/utils/md5';
 import { stubTranslation as _, uniqueId } from '@/utils/misc';
 import { findABSServerById, useABSServerStore } from '@/store/absServerStore';
 import { useLibraryStore } from '@/store/libraryStore';
+import { getReadingDate } from '@/utils/readingDate';
 
 /** Number of audio tracks a library item carries, from whichever field the server populated. */
 const audioTrackCount = (item: ABSLibraryItem): number =>
@@ -45,6 +46,9 @@ const progressEqual = (a: Book['progress'], b: Book['progress']): boolean => {
   return a[0] === b[0] && a[1] === b[1];
 };
 
+const timestamp = (value: number | null | undefined): number | undefined =>
+  typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
+
 /** Pure: compute the library delta for one server. Exported for tests. */
 export const reconcileAbsBooks = (input: {
   server: ABSServer;
@@ -57,9 +61,11 @@ export const reconcileAbsBooks = (input: {
    * same newest-wins rule the resume path uses (isLocalProgressFresher).
    */
   lastPlayedAtByHash: Map<string, number>;
+  /** Undefined on a failed history fetch: retain known dates and retry later. */
+  lastListenedAtByItem?: Map<string, number>;
   now: number;
 }): { upserts: Book[]; tombstoneHashes: string[] } => {
-  const { server, items, progress, library, lastPlayedAtByHash, now } = input;
+  const { server, items, progress, library, lastPlayedAtByHash, lastListenedAtByItem, now } = input;
 
   const progressByItemId = new Map(progress.map((p) => [p.libraryItemId, p]));
 
@@ -67,9 +73,9 @@ export const reconcileAbsBooks = (input: {
   // matching; other servers' books and local books are never touched.
   const existingByFilePath = new Map<string, Book>();
   for (const book of library) {
-    const parsed = parseAbsFilePath(book.filePath);
+    const parsed = parseAbsFilePath(book.filePath) ?? parseAbsFilePath(book.metadata?.absSource);
     if (parsed && parsed.serverId === server.id) {
-      existingByFilePath.set(book.filePath!, book);
+      existingByFilePath.set(makeAbsFilePath(parsed.serverId, parsed.itemId), book);
     }
   }
 
@@ -100,6 +106,24 @@ export const reconcileAbsBooks = (input: {
       : undefined;
 
     const existing = existingByFilePath.get(filePath);
+    const addedAt = timestamp(item.addedAt) ?? existing?.createdAt ?? now;
+    // Completion is an event, separate from playback position. Its own clock
+    // lets a newer deliberate Unread/Reading/On hold choice survive resync.
+    // Older ABS servers may omit finishedAt; their progress clock is the best
+    // available fallback. An undated event cannot override a dated choice.
+    const completedAt = itemProgress?.isFinished
+      ? (timestamp(itemProgress.finishedAt) ??
+        timestamp(itemProgress.lastUpdate) ??
+        (existing?.readingStatusUpdatedAt ? undefined : now))
+      : undefined;
+    const completion =
+      completedAt !== undefined && completedAt > (existing?.readingStatusUpdatedAt ?? 0)
+        ? { readingStatus: 'finished' as const, readingStatusUpdatedAt: completedAt }
+        : undefined;
+    const listenedAt =
+      !ebook && lastListenedAtByItem
+        ? Math.max(lastListenedAtByItem.get(item.id) ?? 0, getReadingDate(existing?.metadata) ?? 0)
+        : undefined;
     if (existing) {
       // Newest wins, exactly as on the resume path. Without this a paused
       // book whose close-session failed had its fresher local position
@@ -126,6 +150,10 @@ export const reconcileAbsBooks = (input: {
       const author = keepMetadata ? existing.author : serverAuthor;
 
       const changed =
+        !!completion ||
+        existing.createdAt !== addedAt ||
+        existing.filePath !== filePath ||
+        (listenedAt !== undefined && getReadingDate(existing.metadata) !== listenedAt) ||
         existing.title !== title ||
         existing.author !== author ||
         existing.duration !== duration ||
@@ -141,6 +169,8 @@ export const reconcileAbsBooks = (input: {
 
       const updated: Book = {
         ...existing,
+        ...completion,
+        filePath,
         title,
         author,
         sourceTitle: title,
@@ -150,12 +180,15 @@ export const reconcileAbsBooks = (input: {
         primaryLanguage,
         progress: bookProgress,
         deletedAt: null,
+        createdAt: addedAt,
         updatedAt: now,
       };
       updated.metadata = buildAbsBookMetadata(updated);
+      if (listenedAt !== undefined) updated.metadata.absLastListenedAt = listenedAt;
       upserts.push(updated);
     } else {
       const stub: Book = {
+        ...completion,
         hash: md5(filePath),
         format: 'ABS',
         filePath,
@@ -167,13 +200,14 @@ export const reconcileAbsBooks = (input: {
         episodeCount: numEpisodes,
         primaryLanguage,
         progress: podcast ? undefined : serverProgress,
-        createdAt: now,
+        createdAt: addedAt,
         updatedAt: now,
         deletedAt: null,
       };
       // The identity and badge fields have no cloud columns, so they ride to
       // peers inside `metadata` — see buildAbsBookMetadata.
       stub.metadata = buildAbsBookMetadata(stub);
+      if (listenedAt !== undefined) stub.metadata.absLastListenedAt = listenedAt;
       upserts.push(stub);
     }
   }
@@ -295,7 +329,13 @@ export const syncAbsServer = async (appService: AppService, server: ABSServer): 
     selectedLibraries.map((lib) => client.getLibraryItems(lib.id)),
   );
   const items = itemLists.flat();
-  const { mediaProgress } = await client.getMe();
+  const [{ mediaProgress }, lastListenedAtByItem] = await Promise.all([
+    client.getMe(),
+    client.getLastListenedAtByItem().catch((error: unknown) => {
+      console.warn('Failed to load Audiobookshelf listening history:', error);
+      return undefined;
+    }),
+  ]);
 
   const now = Date.now();
   const { library } = useLibraryStore.getState();
@@ -312,6 +352,7 @@ export const syncAbsServer = async (appService: AppService, server: ABSServer): 
     progress: mediaProgress,
     library,
     lastPlayedAtByHash,
+    lastListenedAtByItem,
     now,
   });
 

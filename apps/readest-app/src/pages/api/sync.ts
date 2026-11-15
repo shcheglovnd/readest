@@ -1,4 +1,5 @@
 import { mergeTTSPacks, type TTSPacks } from '@/utils/ttsPacks';
+import { mergeSerializedReadingDates } from '@/utils/readingDate';
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { NextRequest, NextResponse } from 'next/server';
 import { PostgrestError } from '@supabase/supabase-js';
@@ -234,6 +235,9 @@ export function resolveMetadataMerge(
   // whole fleet (#5912). title/author are NOT NULL columns and need no such
   // guard.
   fields.metadata = fields.metadata ?? loser.metadata;
+  fields.metadata =
+    mergeSerializedReadingDates(fields.metadata, client.metadata, server.metadata) ??
+    fields.metadata;
   return fields;
 }
 

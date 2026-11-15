@@ -3,6 +3,7 @@ import { Book, BookConfig, BookNote } from '@/types/book';
 import { resolveReferencePageCount } from '@/utils/progress';
 import { bookGroupDiffers, pickFresherGroup } from '@/utils/book';
 import { incomingNoteWins } from '@/utils/booknoteStamp';
+import { mergeReadingDates } from '@/utils/readingDate';
 import { RemoteBookConfig } from './wire';
 
 /**
@@ -200,6 +201,7 @@ export const mergeBookMetadata = (local: Book, remote: Book): Book => {
   if (!merged.originalFilename && remote.originalFilename) {
     merged.originalFilename = remote.originalFilename;
   }
+  merged.metadata = mergeReadingDates(merged.metadata, local.metadata, remote.metadata);
   return merged;
 };
 
