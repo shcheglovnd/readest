@@ -38,8 +38,8 @@ vi.mock('@/app/reader/hooks/useTextTranslation', () => ({
 vi.mock('react-virtuoso', async () => {
   const ReactMod = await import('react');
   return {
-    Virtuoso: ReactMod.forwardRef((props: { totalCount: number }, _ref: React.Ref<unknown>) => {
-      renderedRowCount = props.totalCount;
+    Virtuoso: ReactMod.forwardRef((props: { data: unknown[] }, _ref: React.Ref<unknown>) => {
+      renderedRowCount = props.data.length;
       return null;
     }),
   };

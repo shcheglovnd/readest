@@ -367,9 +367,11 @@ const TOCView: React.FC<{
             }, 10000);
           }}
           style={{ height: containerHeight }}
-          totalCount={displayItems.length}
-          itemContent={(index) => {
-            const row = displayItems[index]!;
+          data={displayItems}
+          itemContent={(_index, row) => {
+            // Use Virtuoso's row snapshot while expansion or thumbnail reflow
+            // changes the list; its measured indices can briefly lag behind.
+            if (!row) return null;
             if (isPageThumbnailsItem(row)) {
               return (
                 <PageThumbnailsRow

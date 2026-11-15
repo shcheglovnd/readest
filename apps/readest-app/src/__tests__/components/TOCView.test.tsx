@@ -2,6 +2,7 @@ import { render, act, cleanup } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 import type { BookDoc, TOCItem } from '@/libs/document';
+import type { TOCDisplayItem } from '@/app/reader/components/sidebar/TOCItem';
 
 const bookDoc = { sections: [], rendition: {} } as unknown as BookDoc;
 
@@ -15,6 +16,10 @@ let capturedInitialized:
   | ((instance: { elements: () => { viewport: HTMLElement } }) => void)
   | undefined;
 let mockProgress: { sectionHref: string; location: string } | null;
+let listProps: {
+  data?: TOCDisplayItem[];
+  itemContent: (index: number, row: TOCDisplayItem | undefined) => React.ReactNode;
+};
 
 // ---------- Mocks ----------
 vi.mock('@/store/readerStore', () => {
@@ -53,9 +58,10 @@ vi.mock('react-virtuoso', async () => {
   return {
     Virtuoso: ReactMod.forwardRef(
       (
-        props: { scrollerRef?: (el: HTMLElement | Window | null) => void },
+        props: typeof listProps & { scrollerRef?: (el: HTMLElement | Window | null) => void },
         ref: React.Ref<unknown>,
       ) => {
+        listProps = props;
         ReactMod.useImperativeHandle(ref, () => ({
           scrollToIndex: (arg: unknown) => scrollToIndexSpy(arg),
         }));
@@ -66,6 +72,37 @@ vi.mock('react-virtuoso', async () => {
       },
     ),
   };
+});
+
+describe('TOCView — changing virtualized rows', () => {
+  it('renders the row from Virtuoso’s snapshot while the TOC shrinks', () => {
+    const toc = makeFlatToc(30);
+    const { rerender } = render(<TOCView bookKey='book1' bookDoc={bookDoc} toc={toc} />);
+    // A measured list can retain its old rows for one render while accepting
+    // a new itemContent callback. This index is outside the new, shorter TOC.
+    const previousRow: TOCDisplayItem = { item: toc[29]!, depth: 0, index: 29 };
+    rerender(<TOCView bookKey='book1' bookDoc={bookDoc} toc={toc.slice(0, 5)} />);
+
+    expect(() => render(listProps.itemContent(29, previousRow))).not.toThrow();
+    expect(document.querySelector('[title="Chapter 29"]')).not.toBeNull();
+    expect(listProps.data).toHaveLength(5);
+  });
+
+  it('does not substitute a different row when a current-position row shifts indices', () => {
+    const toc = makeFlatToc(5);
+    render(<TOCView bookKey='book1' bookDoc={bookDoc} toc={toc} />);
+    const position: TOCDisplayItem = { isCurrentPosition: true, depth: 1, page: 310 };
+
+    const { getByRole } = render(listProps.itemContent(1, position));
+    expect(getByRole('treeitem', { name: 'Current position, 310' })).toBeTruthy();
+  });
+
+  it('skips a transient row with no data instead of crashing the reader', () => {
+    render(<TOCView bookKey='book1' bookDoc={bookDoc} toc={makeFlatToc(5)} />);
+
+    expect(() => listProps.itemContent(100, undefined)).not.toThrow();
+    expect(listProps.itemContent(100, undefined)).toBeNull();
+  });
 });
 
 // Capture the OverlayScrollbars `initialized` callback so the test can fire it

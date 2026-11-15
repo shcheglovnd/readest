@@ -6,6 +6,8 @@ over HTTPS, without uploading a second server-side copy of every book.
 
 - **Cover cache recovery:** missing local cover images are downloaded again on
   sync, even when the device already has the book metadata.
+- **Stable table of contents:** virtualized TOC rows keep their data during
+  expansion and PDF thumbnail reflow, avoiding stale-index reader crashes.
 - **Personal libraries:** self-hosted installations skip the anonymous starter
   books and remove cached starter entries without deleting any book files.
 - **Existing storage:** an optional filesystem service and five small hooks at
