@@ -4,6 +4,8 @@ This fork adds a filesystem-backed home library to Readest. Book folders can be
 managed through SMB/Samba while the web/PWA reader serves the existing originals
 over HTTPS, without uploading a second server-side copy of every book.
 
+- **Cover cache recovery:** missing local cover images are downloaded again on
+  sync, even when the device already has the book metadata.
 - **Personal libraries:** self-hosted installations skip the anonymous starter
   books and remove cached starter entries without deleting any book files.
 - **Existing storage:** an optional filesystem service and five small hooks at

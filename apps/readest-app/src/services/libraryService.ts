@@ -1,6 +1,6 @@
 import { FileSystem, SaveLibraryBooksOptions } from '@/types/system';
 import { Book } from '@/types/book';
-import { getLibraryFilename } from '@/utils/book';
+import { getCoverFilename, getLibraryFilename } from '@/utils/book';
 import { safeLoadJSON, safeSaveJSON } from './persistence';
 
 const COVER_CONCURRENCY = 20;
@@ -28,6 +28,11 @@ export async function loadLibraryBooks(
   const books = await safeLoadJSON<Book[]>(fs, libraryFilename, 'Books', []);
 
   await processInBatches(books, COVER_CONCURRENCY, async (book) => {
+    // Browser storage can evict the image while retaining library metadata.
+    // A saved download marker does not prove the cover is still on this device.
+    if (book.coverDownloadedAt && !(await fs.exists(getCoverFilename(book), 'Books'))) {
+      book.coverDownloadedAt = null;
+    }
     book.coverImageUrl = await generateCoverImageUrl(book);
     book.updatedAt ??= book.lastUpdated || Date.now();
   });

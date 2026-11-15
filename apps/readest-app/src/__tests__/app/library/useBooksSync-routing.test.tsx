@@ -176,6 +176,81 @@ afterEach(() => {
 });
 
 describe('useBooksSync pullLibrary routing (issue #5062)', () => {
+  it('also pulls unchanged books during automatic missing-cover recovery', async () => {
+    syncState.lastSyncedAtBooks = 1000;
+    useLibraryStore.getState().setLibrary([
+      {
+        hash: 'cached-book',
+        title: 'Cached Book',
+        author: 'Author',
+        format: 'EPUB',
+        createdAt: 100,
+        updatedAt: 200,
+        syncedAt: 2000,
+        uploadedAt: 100,
+        coverHash: 'cover-hash',
+        coverDownloadedAt: null,
+      },
+    ]);
+    renderHook(() => useBooksSync());
+    await waitFor(() => {
+      expect(
+        syncState.syncBooks.mock.calls.some((call) => call[1] === 'both' && call[2] === 0),
+      ).toBe(true);
+    });
+  });
+
+  it('pulls unchanged cloud books when an existing shelf needs missing covers', async () => {
+    useLibraryStore.getState().setLibrary([
+      {
+        hash: 'cached-book',
+        title: 'Cached Book',
+        author: 'Author',
+        format: 'EPUB',
+        createdAt: 100,
+        updatedAt: 200,
+        uploadedAt: 100,
+        coverHash: 'cover-hash',
+        coverDownloadedAt: null,
+      },
+    ]);
+    const { result } = renderHook(() => useBooksSync());
+    await waitFor(() => expect(syncState.syncBooks).toHaveBeenCalled());
+    syncState.syncBooks.mockClear();
+    await act(async () => {
+      await result.current.pullLibrary();
+    });
+    expect(syncState.syncBooks).toHaveBeenCalledWith([], 'pull', 0);
+  });
+
+  it.each([
+    { coverHash: 'cover-hash', coverDownloadedAt: 100 },
+    { coverHash: null, coverDownloadedAt: null },
+    { coverHash: 'cover-hash', coverDownloadedAt: null, uploadedAt: null },
+    { coverHash: 'cover-hash', coverDownloadedAt: null, deletedAt: 300 },
+    { coverHash: 'cover-hash', coverDownloadedAt: null, format: 'ABS' as const },
+  ])('keeps incremental pulls for covers outside cloud recovery: %j', async (overrides) => {
+    useLibraryStore.getState().setLibrary([
+      {
+        hash: 'cached-book',
+        title: 'Cached Book',
+        author: 'Author',
+        format: 'EPUB',
+        createdAt: 100,
+        updatedAt: 200,
+        uploadedAt: 100,
+        ...overrides,
+      },
+    ]);
+    const { result } = renderHook(() => useBooksSync());
+    await waitFor(() => expect(syncState.syncBooks).toHaveBeenCalled());
+    syncState.syncBooks.mockClear();
+    await act(async () => {
+      await result.current.pullLibrary();
+    });
+    expect(syncState.syncBooks).toHaveBeenCalledWith([], 'pull', undefined);
+  });
+
   it('runs both the file pass and the native pull when both providers are enabled', async () => {
     routing.readestEnabled = true;
     routing.backends = ['gdrive'];

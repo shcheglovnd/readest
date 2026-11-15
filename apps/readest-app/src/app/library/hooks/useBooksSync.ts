@@ -28,6 +28,17 @@ import {
 import { getBookChangedAt, getPrimaryLanguage, pickFresherGroup } from '@/utils/book';
 import { isAudiobook, parseAbsFilePath } from '@/utils/audiobook';
 
+const needsCoverRecovery = (books: Book[]) =>
+  books.some(
+    (book) =>
+      !book.deletedAt &&
+      book.uploadedAt &&
+      book.coverHash &&
+      !book.coverDownloadedAt &&
+      !isAudiobook(book) &&
+      !isFeedBook(book),
+  );
+
 export const useBooksSync = () => {
   const _ = useTranslation();
   const { user } = useAuth();
@@ -127,7 +138,12 @@ export const useBooksSync = () => {
         let nativeSynced = 0;
         if (runNativePull) {
           const library = useLibraryStore.getState().library;
-          const since = (libraryLoaded && library.length === 0) || fullRefresh ? 0 : undefined;
+          // Missing local covers need their unchanged cloud rows too; an
+          // incremental pull may be empty after the shelf metadata was synced.
+          const since =
+            (libraryLoaded && (library.length === 0 || needsCoverRecovery(library))) || fullRefresh
+              ? 0
+              : undefined;
           nativeSynced = (await syncBooks([], 'pull', since)) ?? 0;
         }
 
@@ -170,7 +186,11 @@ export const useBooksSync = () => {
         syncPendingRef.current = false;
         isPullingRef.current = true;
         try {
-          await syncBooks(newBooks.books, 'both');
+          if (needsCoverRecovery(useLibraryStore.getState().library)) {
+            await syncBooks(newBooks.books, 'both', 0);
+          } else {
+            await syncBooks(newBooks.books, 'both');
+          }
         } finally {
           releaseSyncLock();
         }

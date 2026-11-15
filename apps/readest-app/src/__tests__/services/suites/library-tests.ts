@@ -58,6 +58,37 @@ export function libraryTests(getService: () => AppService) {
       expect(parsed[0]!.coverImageUrl).toBeUndefined();
     });
 
+    it('marks a missing cached cover for download without changing reading state', async () => {
+      const service = getService();
+      const book = makeBook({
+        uploadedAt: 1000,
+        coverHash: 'cover-hash',
+        coverUpdatedAt: 1500,
+        coverDownloadedAt: 2000,
+        progress: [46, 585],
+        readingStatus: 'reading',
+      });
+      await service.saveLibraryBooks([book]);
+
+      const [loaded] = await service.loadLibraryBooks();
+      expect(loaded?.coverDownloadedAt).toBeNull();
+      expect(loaded?.progress).toEqual(book.progress);
+      expect(loaded?.readingStatus).toBe(book.readingStatus);
+      expect(loaded?.updatedAt).toBe(book.updatedAt);
+      expect(loaded?.coverHash).toBe(book.coverHash);
+    });
+
+    it('keeps the download marker when the cached cover is still present', async () => {
+      const service = getService();
+      const book = makeBook({ coverHash: 'cover-hash', coverDownloadedAt: 2000 });
+      await service.createDir(book.hash, 'Books', true);
+      await service.writeFile(`${book.hash}/cover.png`, 'Books', new Uint8Array([1, 2, 3]).buffer);
+      await service.saveLibraryBooks([book]);
+
+      const [loaded] = await service.loadLibraryBooks();
+      expect(loaded?.coverDownloadedAt).toBe(2000);
+    });
+
     it('should create backup file alongside main file', async () => {
       const service = getService();
       await service.saveLibraryBooks([makeBook()]);
