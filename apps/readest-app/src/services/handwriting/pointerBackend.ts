@@ -7,7 +7,9 @@ export type PointerBatchListener = (
   erase: boolean,
 ) => void;
 
-export type InkGesture = { action: 'undo' | 'redo' } | { action: 'swipe'; dx: number; dy: number };
+export type InkGesture =
+  | { action: 'undo' | 'redo' }
+  | { action: 'swipe' | 'pan'; dx: number; dy: number };
 
 /**
  * Generic pointer-event backend: the platform-neutral fallback used on
@@ -28,14 +30,16 @@ export class PointerHandwritingBackend {
 
   // Once a stylus is seen, fingers navigate instead of leaving palm marks.
   private penSeen = false;
-  private gestureListener: ((gesture: InkGesture) => void) | null = null;
+  private gestureListener: ((gesture: InkGesture) => boolean | void) | null = null;
   private touches = new Map<number, { x: number; y: number }>();
   private touchStart = { x: 0, y: 0, at: 0 };
   private touchCount = 0;
   private touchMoved = false;
   private touchBlocked = false;
+  private panning = false;
+  private panPoint = { x: 0, y: 0 };
 
-  onGesture(listener: (gesture: InkGesture) => void) {
+  onGesture(listener: (gesture: InkGesture) => boolean | void) {
     this.gestureListener = listener;
   }
 
@@ -63,6 +67,7 @@ export class PointerHandwritingBackend {
     this.el.removeEventListener('lostpointercapture', this.onCancel);
     this.cancelStroke();
     this.touches.clear();
+    this.panning = false;
     this.el.removeEventListener('touchstart', this.claimTouch);
     this.el.removeEventListener('touchmove', this.claimTouch);
     this.el = null;
@@ -100,6 +105,8 @@ export class PointerHandwritingBackend {
       if (!this.touches.size) {
         this.touchStart = { x: e.clientX, y: e.clientY, at: Date.now() };
         this.touchCount = 0;
+        this.panning = false;
+        this.panPoint = { x: e.clientX, y: e.clientY };
         this.touchMoved = false;
         this.touchBlocked = this.activePointerType === 'pen';
       }
@@ -132,6 +139,7 @@ export class PointerHandwritingBackend {
     if (origin && Math.hypot(e.clientX - origin.x, e.clientY - origin.y) > 12) {
       this.touchMoved = true;
     }
+    this.panTouch(e);
     if (e.pointerId !== this.activePointerId || !this.toPage) return;
     const erasing = this.isEraserEvent(e);
     if (erasing !== this.erasing) {
@@ -144,11 +152,36 @@ export class PointerHandwritingBackend {
     this.schedule();
   };
 
+  /** A scrolling reader claims pans; a paginated reader keeps release-to-turn. */
+  private panTouch(e: PointerEvent) {
+    if (
+      !this.penSeen ||
+      !this.touchMoved ||
+      this.touchBlocked ||
+      this.touchCount !== 1 ||
+      this.touches.size !== 1 ||
+      !this.touches.has(e.pointerId)
+    )
+      return;
+    const dx = e.clientX - this.panPoint.x;
+    const dy = e.clientY - this.panPoint.y;
+    if ((dx || dy) && this.gestureListener?.({ action: 'pan', dx, dy }) === true) {
+      this.panning = true;
+      this.panPoint = { x: e.clientX, y: e.clientY };
+    }
+  }
+
   private onUp = (e: PointerEvent) => {
     const origin = this.touches.get(e.pointerId);
     if (origin && Math.hypot(e.clientX - origin.x, e.clientY - origin.y) > 12)
       this.touchMoved = true;
-    if (this.touches.delete(e.pointerId) && !this.touches.size && !this.touchBlocked) {
+    this.panTouch(e);
+    if (
+      this.touches.delete(e.pointerId) &&
+      !this.touches.size &&
+      !this.touchBlocked &&
+      !this.panning
+    ) {
       const dx = e.clientX - this.touchStart.x;
       const dy = e.clientY - this.touchStart.y;
       if (this.touchCount === 1 && this.penSeen && Math.hypot(dx, dy) >= 40) {

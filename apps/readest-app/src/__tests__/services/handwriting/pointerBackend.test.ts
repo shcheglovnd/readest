@@ -294,7 +294,8 @@ describe('finger gestures while drawing', () => {
     touch(el, 'pointerdown', 1, 100);
     touch(el, 'pointermove', 1, 40);
     touch(el, 'pointerup', 1, 40);
-    expect(gesture).toHaveBeenCalledExactlyOnceWith({ action: 'swipe', dx: -60, dy: 0 });
+    expect(gesture).toHaveBeenLastCalledWith({ action: 'swipe', dx: -60, dy: 0 });
+    expect(gesture.mock.calls.filter(([g]) => g.action === 'swipe')).toHaveLength(1);
     expect(batch).not.toHaveBeenCalled();
   });
 
@@ -340,5 +341,59 @@ describe('finger gestures while drawing', () => {
     dispatch(el, 'pointerdown', { clientX: 9 });
     dispatch(el, 'pointerup', {});
     expect(batch).toHaveBeenLastCalledWith([[9, 0, 0.5]], 'end', false);
+  });
+});
+
+describe('continuous finger panning with a stylus', () => {
+  const setup = () => {
+    const el = new FakeElement();
+    const backend = new PointerHandwritingBackend();
+    const gesture = vi.fn((g: { action: string }) => g.action === 'pan');
+    const batch = vi.fn();
+    backend.onGesture(gesture);
+    backend.onBatch(batch);
+    backend.attach(el as unknown as HTMLElement, identity);
+    dispatch(el, 'pointerover', {});
+    return { el, backend, gesture, batch };
+  };
+  const finger = (el: FakeElement, type: string, x: number, y: number, id = 1) =>
+    dispatch(el, type, { pointerType: 'touch', pointerId: id, clientX: x, clientY: y });
+
+  it('pans before release, follows small increments, and does not jump again on release', () => {
+    const { el, gesture, batch } = setup();
+    finger(el, 'pointerdown', 100, 200);
+    finger(el, 'pointermove', 95, 170);
+    expect(gesture).toHaveBeenLastCalledWith({ action: 'pan', dx: -5, dy: -30 });
+    finger(el, 'pointermove', 96, 167);
+    expect(gesture).toHaveBeenLastCalledWith({ action: 'pan', dx: 1, dy: -3 });
+    finger(el, 'pointerup', 96, 165);
+    expect(gesture.mock.calls.map(([g]) => g)).toEqual([
+      { action: 'pan', dx: -5, dy: -30 },
+      { action: 'pan', dx: 1, dy: -3 },
+      { action: 'pan', dx: 0, dy: -2 },
+    ]);
+    expect(batch).not.toHaveBeenCalled();
+  });
+
+  it('suppresses a palm, multitouch, and a cancelled drag', () => {
+    const { el, gesture } = setup();
+    dispatch(el, 'pointerdown', { pointerId: 10 });
+    finger(el, 'pointerdown', 100, 200);
+    dispatch(el, 'pointerup', { pointerId: 10 });
+    finger(el, 'pointermove', 100, 100);
+    finger(el, 'pointerup', 100, 100);
+    expect(gesture).not.toHaveBeenCalled();
+    finger(el, 'pointerdown', 100, 200);
+    finger(el, 'pointerdown', 140, 200, 2);
+    finger(el, 'pointermove', 100, 100);
+    finger(el, 'pointerup', 100, 100);
+    finger(el, 'pointerup', 140, 100, 2);
+    expect(gesture).not.toHaveBeenCalled();
+    finger(el, 'pointerdown', 100, 200);
+    finger(el, 'pointermove', 100, 170);
+    expect(gesture).toHaveBeenCalledOnce();
+    finger(el, 'pointercancel', 100, 170);
+    finger(el, 'pointerup', 100, 100);
+    expect(gesture).toHaveBeenCalledOnce();
   });
 });

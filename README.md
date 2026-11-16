@@ -4,6 +4,14 @@ This fork adds a filesystem-backed home library to Readest. Book folders can be
 managed through SMB/Samba while the web/PWA reader serves the existing originals
 over HTTPS, without uploading a second server-side copy of every book.
 
+- **PDF handwriting and zoom:** saved ink moves with the rendered page during
+  scrolling and pinch previews, including two-page spreads. Hidden spread pages
+  no longer distort drawing coordinates. Saved PDF ink also survives the config
+  loading before document parsing completes. After an active stylus is detected,
+  a finger pans scrolling or enlarged pages continuously; ordinary paginated
+  swipes, palm rejection and undo/redo gestures are retained. Horizontal pan lock
+  is respected. Fixed-layout zoom now reaches 10%, including pinch gestures.
+  These shared reader changes apply to web/PWA and newly built native apps.
 - **Cover cache recovery:** missing local cover images are downloaded again on
   sync, even when the device already has the book metadata.
 - **Stable table of contents:** virtualized TOC rows keep their data during

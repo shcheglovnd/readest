@@ -25,3 +25,19 @@ export const screenToPage = (p: Point2D, rect: PageRect, opts?: { clamp?: boolea
   }
   return { x, y };
 };
+
+/** Visible page bounds only: a hidden spread frame has a zero rect at (0, 0). */
+export const measureInkFrames = (frames: readonly Element[]): PageRect | null => {
+  const rects = frames
+    .map((frame) => frame.getBoundingClientRect())
+    .filter((rect) => rect.width > 0 && rect.height > 0);
+  if (!rects.length) return null;
+  const left = Math.min(...rects.map((r) => r.left));
+  const top = Math.min(...rects.map((r) => r.top));
+  return {
+    left,
+    top,
+    width: Math.max(...rects.map((r) => r.right)) - left,
+    height: Math.max(...rects.map((r) => r.bottom)) - top,
+  };
+};

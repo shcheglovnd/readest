@@ -12,15 +12,17 @@ import { inkSignature, loadInkEditor, withInkNotes } from '@/services/handwritin
 import { fixedPageKey, sectionPageKey } from '@/services/handwriting/pageKey';
 import { createInkAnchoring } from '../utils/inkAnchoring';
 import { boundsOf } from '@/services/handwriting/anchor';
-import type { PageRect } from '@/services/handwriting/coords';
+import { measureInkFrames, type PageRect } from '@/services/handwriting/coords';
 import type { InkStroke, InkTool } from '@/services/handwriting/model';
 import type { ReadSettings } from '@/types/settings';
 import type { FoliateView } from '@/types/view';
 
 /** Strokes normalized to one rect; the canvas draws each layer against its rect. */
 export interface InkLayer {
-  strokes: InkStroke[];
+  strokes: readonly InkStroke[];
   rect: PageRect;
+  /** Fixed-layout ink scrolls and transforms with these page frames. */
+  frames?: Element[];
 }
 
 const EMPTY_RECT: PageRect = { left: 0, top: 0, width: 0, height: 0 };
@@ -61,16 +63,7 @@ const pageFrames = (view: FoliateView | null): Element[] =>
  * relative to the page content.
  */
 const measureFixedPage = (view: FoliateView | null): PageRect | null => {
-  const rects = (view?.renderer.getContents() ?? []).flatMap(({ doc }) => {
-    const frame = doc?.defaultView?.frameElement;
-    return frame ? [frame.getBoundingClientRect()] : [];
-  });
-  if (rects.length === 0) return null;
-  const left = Math.min(...rects.map((r) => r.left));
-  const top = Math.min(...rects.map((r) => r.top));
-  const right = Math.max(...rects.map((r) => r.right));
-  const bottom = Math.max(...rects.map((r) => r.bottom));
-  return { left, top, width: right - left, height: bottom - top };
+  return measureInkFrames(pageFrames(view));
 };
 
 export function useHandwriting(bookKey: string) {
@@ -90,6 +83,7 @@ export function useHandwriting(bookKey: string) {
   const penWidth = marker ? readSettings.handwritingMarkerWidth : readSettings.handwritingWidth;
 
   const editorRef = useRef<HandwritingEditor | null>(null);
+  const editorLayoutRef = useRef(isFixedLayout);
   // The ink notes as this hook last wrote or read them.
   const inkSignatureRef = useRef('');
   const serviceRef = useRef<HandwritingService | null>(null);
@@ -113,6 +107,7 @@ export function useHandwriting(bookKey: string) {
     const booknotes = getConfig(bookKey)?.booknotes;
     inkSignatureRef.current = inkSignature(booknotes);
     editorRef.current = loadInkEditor(booknotes ?? [], isFixedLayout);
+    editorLayoutRef.current = isFixedLayout;
   }, [bookKey, getConfig, isFixedLayout]);
 
   if (!editorRef.current) loadEditor();
@@ -153,8 +148,14 @@ export function useHandwriting(bookKey: string) {
   // changes the notes without this hook; pick it up.
   const booknotes = getConfig(bookKey)?.booknotes;
   useEffect(() => {
-    if (inkSignature(booknotes) !== inkSignatureRef.current) reload();
-  }, [booknotes, reload]);
+    // Config can arrive before PDF parsing identifies the fixed layout. Re-key
+    // the same saved strokes once that is known, without changing their data.
+    if (
+      editorLayoutRef.current !== isFixedLayout ||
+      inkSignature(booknotes) !== inkSignatureRef.current
+    )
+      reload();
+  }, [booknotes, reload, isFixedLayout]);
 
   // Write to the store on every committed edit, and to disk shortly after, so
   // ink survives the app being killed before the next page turn.
@@ -253,7 +254,7 @@ export function useHandwriting(bookKey: string) {
         const frame = doc?.defaultView?.frameElement;
         const strokes = editor.strokes(fixedPageKey(index));
         if (!frame || !strokes.length) return [];
-        return [{ strokes: [...strokes], rect: toRect(frame.getBoundingClientRect()) }];
+        return [{ strokes, rect: toRect(frame.getBoundingClientRect()), frames: [frame] }];
       }
       const strokes = editor.strokes(sectionPageKey(index));
       const anchoring = strokes.length ? createInkAnchoring(view, index, cellRect) : null;
@@ -323,17 +324,34 @@ export function useHandwriting(bookKey: string) {
 
   useEffect(() => {
     serviceRef.current?.onGesture((gesture) => {
-      if (gesture.action !== 'swipe') return;
+      if (gesture.action !== 'swipe' && gesture.action !== 'pan') return false;
       const { dx, dy } = gesture;
       const view = getView(bookKey);
+      if (gesture.action === 'pan') {
+        if (!view) return false;
+        const settings = getViewSettings(bookKey);
+        const pannable = scrolled || (isFixedLayout && (view.isOverflowX() || view.isOverflowY()));
+        if (!pannable) return false;
+        if (scrolled && !isFixedLayout) {
+          // The EPUB pan API is a bounded paginated drag; continuous reading
+          // uses the same native scroll position as finger/volume scrolling.
+          const renderer = view.renderer;
+          renderer.containerPosition -= renderer.scrollProp === 'scrollLeft' ? dx : dy;
+        } else {
+          const lockX = settings?.lockHorizontalPan && view.renderer.scrollProp !== 'scrollLeft';
+          view.pan(lockX ? 0 : -dx, -dy);
+        }
+        return true;
+      }
       if (scrolled && view?.renderer.scrollProp !== 'scrollLeft') {
         if (Math.abs(dy) > Math.abs(dx)) void (dy > 0 ? view?.prev() : view?.next());
       } else if (Math.abs(dx) > Math.abs(dy)) {
         if (dx > 0) view?.goLeft();
         else view?.goRight();
       }
+      return false;
     });
-  }, [scrolled, getView, bookKey]);
+  }, [scrolled, isFixedLayout, getViewSettings, getView, bookKey]);
 
   // Scrolled views show several sections or pages at once: send each stroke
   // to the one it is drawn over, pinned to that section's text or page.
@@ -414,7 +432,13 @@ export function useHandwriting(bookKey: string) {
 
   const layers: InkLayer[] = scrolled
     ? [...scrolledLayers(), { strokes: serviceRef.current?.liveStrokes() ?? [], rect: pageRect }]
-    : [{ strokes: serviceRef.current?.strokesForRender() ?? [], rect: pageRect }];
+    : [
+        {
+          strokes: serviceRef.current?.strokesForRender() ?? [],
+          rect: pageRect,
+          ...(isFixedLayout ? { frames: pageFrames(getView(bookKey)) } : {}),
+        },
+      ];
 
   return {
     layers,

@@ -282,11 +282,11 @@ export class HandwritingService {
     this.onRender?.();
   }
 
-  onGesture(listener: (gesture: InkGesture) => void) {
+  onGesture(listener: (gesture: InkGesture) => boolean | void) {
     this.pointer.onGesture((gesture) => {
       if (gesture.action === 'undo') this.undo();
       else if (gesture.action === 'redo') this.redo();
-      else listener(gesture);
+      else return listener(gesture);
     });
   }
 
