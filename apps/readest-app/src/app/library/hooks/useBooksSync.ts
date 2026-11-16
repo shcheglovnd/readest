@@ -264,18 +264,42 @@ export const useBooksSync = () => {
       const matchingBook = syncedByHash.get(book.hash);
       return !!matchingBook && needsCoverRefresh(book, matchingBook);
     });
-    const coverRefreshHashes = new Set(oldBooksNeedsDownload.map((book) => book.hash));
 
-    const processOldBook = async (oldBook: Book) => {
+    const refreshedCovers = new Map<
+      string,
+      { url: string | undefined; downloadedAt: number | null | undefined }
+    >();
+    const processOldBook = (oldBook: Book) => {
       const matchingBook = syncedByHash.get(oldBook.hash);
       if (matchingBook) {
-        if (coverRefreshHashes.has(oldBook.hash)) {
-          oldBook.coverImageUrl = await appService?.generateCoverImageUrl(oldBook);
+        const refreshed = refreshedCovers.get(oldBook.hash);
+        if (refreshed && (oldBook.coverUpdatedAt ?? 0) <= (matchingBook.coverUpdatedAt ?? 0)) {
+          oldBook = {
+            ...oldBook,
+            coverImageUrl: refreshed.url,
+            coverDownloadedAt: refreshed.downloadedAt,
+          };
         }
-        const mergedBook =
+        const mergedBook: Book =
           matchingBook.updatedAt >= oldBook.updatedAt
             ? { ...oldBook, ...matchingBook, syncedAt: Date.now() }
             : { ...matchingBook, ...oldBook, syncedAt: Date.now() };
+        // A response cannot acknowledge local fields that it does not contain.
+        // Keep the book queued even when the account pull cursor has advanced
+        // past the edit while covers were downloading.
+        if (
+          (
+            [
+              'updatedAt',
+              'readingStatusUpdatedAt',
+              'groupUpdatedAt',
+              'metadataUpdatedAt',
+              'coverUpdatedAt',
+            ] as const
+          ).some((field) => (oldBook[field] ?? 0) > (matchingBook[field] ?? 0))
+        ) {
+          mergedBook.syncedAt = undefined;
+        }
         // Status is resolved by its own timestamp, independent of the row's
         // updatedAt (which page-turn progress dominates) — see #4634.
         const status = pickFresherReadingStatus(oldBook, matchingBook);
@@ -343,9 +367,29 @@ export const useBooksSync = () => {
       });
     }
 
-    const updatedLibrary = await Promise.all(liveLibrary.map(processOldBook));
-    setLibrary(updatedLibrary);
-    appService?.saveLibraryBooks(updatedLibrary);
+    await Promise.all(
+      oldBooksNeedsDownload.map(async (book) => {
+        refreshedCovers.set(book.hash, {
+          url: await appService?.generateCoverImageUrl(book),
+          downloadedAt: book.coverDownloadedAt,
+        });
+      }),
+    );
+    // All asynchronous work completes before reading current state. A cover
+    // download must not replay the pre-download library over a newer edit.
+    const commitLibrary = (additions: Book[] = []) => {
+      const current = useLibraryStore.getState().library.map(processOldBook);
+      const hashes = new Set(current.map((book) => book.hash));
+      for (const book of additions)
+        if (!hashes.has(book.hash)) {
+          current.push(book);
+          hashes.add(book.hash);
+        }
+      setLibrary(current);
+      appService?.saveLibraryBooks(current);
+      return current;
+    };
+    const updatedLibrary = commitLibrary();
 
     const bookHashesInLibrary = new Set(updatedLibrary.map((book) => book.hash));
     // `uploadedAt` gates adoption so a peer never shelves a book whose file it
@@ -384,7 +428,7 @@ export const useBooksSync = () => {
         newBook.primaryLanguage = getPrimaryLanguage(newBook.metadata.language);
       }
       newBook.syncedAt = Date.now();
-      updatedLibrary.push(newBook);
+      return newBook;
     };
 
     if (newBooks.length > 0) {
@@ -397,11 +441,10 @@ export const useBooksSync = () => {
         await appService?.downloadBookCovers(batch).catch((error) => {
           console.warn('Cover download failed; continuing library sync:', error);
         });
-        await Promise.all(batch.map(processNewBook));
+        const additions = await Promise.all(batch.map(processNewBook));
         const progress = Math.min((i + batchSize) / newBooks.length, 1);
         setSyncProgress(progress);
-        setLibrary([...updatedLibrary]);
-        appService?.saveLibraryBooks(updatedLibrary);
+        commitLibrary(additions);
       }
     } catch (err) {
       console.error('Error updating new books:', err);

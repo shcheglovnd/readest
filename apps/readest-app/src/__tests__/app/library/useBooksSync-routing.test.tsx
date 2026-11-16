@@ -150,6 +150,120 @@ describe('useBooksSync cover download failures', () => {
     expect(appService.downloadBookCovers).toHaveBeenCalledTimes(2);
   });
 
+  it('keeps edits and new entries made while a cover refresh is waiting', async () => {
+    const initial = makeBook({
+      readingStatus: 'reading',
+      readingStatusUpdatedAt: 100,
+      groupName: 'Old',
+      groupUpdatedAt: 100,
+      coverHash: 'old',
+      coverUpdatedAt: 100,
+      coverDownloadedAt: 100,
+      progress: [1, 100],
+    });
+    useLibraryStore.getState().setLibrary([initial]);
+    syncState.syncedBooks = [
+      { ...initial, updatedAt: 200, coverHash: 'remote', coverUpdatedAt: 200 },
+    ];
+    let resume!: () => void;
+    appService.downloadBookCovers.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          resume = resolve;
+        }),
+    );
+    renderHook(() => useBooksSync());
+    await waitFor(() => expect(appService.downloadBookCovers).toHaveBeenCalledTimes(1));
+    const edited = {
+      ...initial,
+      readingStatus: 'abandoned' as const,
+      readingStatusUpdatedAt: 300,
+      groupName: 'New',
+      groupUpdatedAt: 300,
+      metadataUpdatedAt: 300,
+      metadata: { title: 'Edited', author: 'Author', language: 'en' },
+      title: 'Edited',
+      updatedAt: 300,
+      progress: [20, 100] as [number, number],
+    };
+    act(() =>
+      useLibraryStore.getState().setLibrary([edited, makeBook({ hash: 'local-addition' })]),
+    );
+    await act(async () => {
+      resume();
+    });
+    await waitFor(() => expect(appService.saveLibraryBooks).toHaveBeenCalled());
+    expect(useLibraryStore.getState().library.find((b) => b.hash === initial.hash)).toMatchObject({
+      readingStatus: 'abandoned',
+      readingStatusUpdatedAt: 300,
+      groupName: 'New',
+      groupUpdatedAt: 300,
+      title: 'Edited',
+      progress: [20, 100],
+    });
+    expect(useLibraryStore.getState().library.some((b) => b.hash === 'local-addition')).toBe(true);
+  });
+
+  it('keeps newer local field clocks pending when a remote row only has newer progress', async () => {
+    const local = makeBook({
+      updatedAt: 100,
+      syncedAt: 150,
+      readingStatus: 'abandoned',
+      readingStatusUpdatedAt: 300,
+      coverDownloadedAt: 100,
+      progress: [1, 100],
+    });
+    useLibraryStore.getState().setLibrary([local]);
+    syncState.syncedBooks = [
+      {
+        ...local,
+        updatedAt: 400,
+        readingStatus: 'reading',
+        readingStatusUpdatedAt: 100,
+        progress: [40, 100],
+      },
+    ];
+    renderHook(() => useBooksSync());
+    await waitFor(() => expect(appService.saveLibraryBooks).toHaveBeenCalled());
+    const saved = useLibraryStore.getState().library[0]!;
+    expect(saved.readingStatus).toBe('abandoned');
+    expect(saved.progress).toEqual([40, 100]);
+    expect(saved.syncedAt).toBeUndefined();
+  });
+
+  it('keeps edits made while new cloud books download in batches', async () => {
+    const initial = makeBook({
+      coverDownloadedAt: 100,
+      readingStatus: 'reading',
+      readingStatusUpdatedAt: 100,
+    });
+    useLibraryStore.getState().setLibrary([initial]);
+    syncState.syncedBooks = [initial, makeBook({ hash: 'remote-addition' })];
+    let resume!: () => void;
+    appService.downloadBookCovers.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          resume = resolve;
+        }),
+    );
+    renderHook(() => useBooksSync());
+    await waitFor(() => expect(appService.downloadBookCovers).toHaveBeenCalledTimes(1));
+    act(() =>
+      useLibraryStore
+        .getState()
+        .setLibrary([
+          { ...initial, readingStatus: 'finished', readingStatusUpdatedAt: 300, updatedAt: 300 },
+        ]),
+    );
+    await act(async () => {
+      resume();
+    });
+    await waitFor(() => expect(useLibraryStore.getState().library).toHaveLength(2));
+    expect(
+      useLibraryStore.getState().library.find((b) => b.hash === initial.hash)?.readingStatus,
+    ).toBe('finished');
+  });
+
   it('adds new books and continues later batches when a cover batch fails', async () => {
     syncState.syncedBooks = Array.from({ length: 11 }, (_, index) =>
       makeBook({ hash: `book-${index + 1}` }),

@@ -6,6 +6,7 @@ import { getBookWithUpdatedMetadata } from '@/utils/book';
 import { BookMetadata } from '@/libs/document';
 import { useEnv } from '@/context/EnvContext';
 import { useAuth } from '@/context/AuthContext';
+import { useLibraryStore } from '@/store/libraryStore';
 import { useThemeStore } from '@/store/themeStore';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useMetadataEdit } from './useMetadataEdit';
@@ -17,6 +18,8 @@ import DeleteConfirmAlert from '@/components/DeleteConfirmAlert';
 import Dialog from '@/components/Dialog';
 import BookDetailView from './BookDetailView';
 import BookDetailEdit from './BookDetailEdit';
+import BookLibraryDetails from './BookLibraryDetails';
+import BookReadingStats from './BookReadingStats';
 import SourceSelector from './SourceSelector';
 import Spinner from '../Spinner';
 
@@ -81,6 +84,7 @@ const BookDetailModal: React.FC<BookDetailModalProps> = ({
   const {
     editedMeta,
     editedTags,
+    customDrafts,
     fieldSources,
     lockedFields,
     fieldErrors,
@@ -160,12 +164,22 @@ const BookDetailModal: React.FC<BookDetailModalProps> = ({
       // The edit field keeps empty segments while typing; drop them and
       // dedupe on save.
       const savedTags = [...new Set(editedTags.map((tag) => tag.trim()).filter(Boolean))];
-      setBookMeta({ ...editedMeta });
+      const savedMeta = {
+        ...editedMeta,
+        calibreColumns: editedMeta.calibreColumns?.map((column) =>
+          Array.isArray(column.value)
+            ? { ...column, value: [...new Set(column.value.map((v) => v.trim()).filter(Boolean))] }
+            : column,
+        ),
+      };
+      const currentBook =
+        useLibraryStore.getState().library.find((b) => b.hash === book.hash) ?? displayBook;
+      setBookMeta(savedMeta);
       setBookTags(savedTags);
       // Capture the updated book before handleBookMetadataUpdate clears the
       // temporary cover fields on editedMeta, so the view refreshes its cover.
-      setDisplayBook(getBookWithUpdatedMetadata(book, editedMeta, savedTags));
-      handleBookMetadataUpdate(book, editedMeta, savedTags);
+      setDisplayBook(getBookWithUpdatedMetadata(currentBook, savedMeta, savedTags));
+      handleBookMetadataUpdate(currentBook, savedMeta, savedTags);
       setEditMode(false);
     }
   };
@@ -254,7 +268,7 @@ const BookDetailModal: React.FC<BookDetailModalProps> = ({
           isOpen={isOpen}
           onClose={handleClose}
           boxClassName={clsx(
-            editMode ? 'sm:min-w-[600px] sm:max-w-[600px]' : 'sm:min-w-[480px] sm:max-w-[480px]',
+            editMode ? 'sm:min-w-[600px] sm:max-w-[600px]' : 'sm:min-w-[560px] sm:max-w-[640px]',
             'sm:h-auto sm:max-h-[90%]',
           )}
           contentClassName='px-6! py-4!'
@@ -265,6 +279,7 @@ const BookDetailModal: React.FC<BookDetailModalProps> = ({
                 book={book}
                 metadata={editedMeta}
                 tags={editedTags}
+                customDrafts={customDrafts}
                 fieldSources={fieldSources}
                 lockedFields={lockedFields}
                 fieldErrors={fieldErrors}
@@ -282,6 +297,16 @@ const BookDetailModal: React.FC<BookDetailModalProps> = ({
               <BookDetailView
                 book={displayBook}
                 metadata={bookMeta}
+                readingDetails={
+                  <>
+                    <BookLibraryDetails
+                      key={displayBook.hash}
+                      book={displayBook}
+                      onChange={setDisplayBook}
+                    />
+                    <BookReadingStats key={displayBook.hash} book={displayBook} />
+                  </>
+                }
                 fileSize={fileSize}
                 shareEnabled={shareEnabled}
                 onEdit={handleBookMetadataUpdate ? handleEditMetadata : undefined}

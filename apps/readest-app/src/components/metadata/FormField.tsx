@@ -4,7 +4,7 @@ import { MdOutlineInfo, MdLock, MdLockOpen, MdError } from 'react-icons/md';
 import { useTranslation } from '@/hooks/useTranslation';
 
 const inputBaseStyles =
-  'w-full rounded-md px-3 py-2 focus:outline-hidden focus:ring-1 focus:ring-blue-500';
+  'eink-bordered w-full rounded-md px-3 py-2 focus:outline-hidden focus:ring-1 focus:ring-blue-500';
 const inputBackgroundStyles = 'bg-base-200/50';
 const labelStyles = 'text-base-content block text-sm font-medium';
 
@@ -116,6 +116,7 @@ const FormField: React.FC<FormFieldProps> = ({
       <div className='relative'>
         {type === 'input' ? (
           <input
+            aria-label={label}
             type={isNumber ? 'number' : 'text'}
             min={0}
             value={value}
@@ -133,6 +134,7 @@ const FormField: React.FC<FormFieldProps> = ({
           />
         ) : (
           <textarea
+            aria-label={label}
             value={value}
             onChange={(e) => onFieldChange(field, e.target.value)}
             placeholder={isLocked ? '' : placeholder}
@@ -153,7 +155,7 @@ const FormField: React.FC<FormFieldProps> = ({
       {error && (
         <div className='flex items-center gap-1 text-xs text-red-600'>
           <MdError className='h-3 w-3' />
-          <span>{error}</span>
+          <span>{_(error)}</span>
         </div>
       )}
       {!error && <SourceIndicator source={source} />}

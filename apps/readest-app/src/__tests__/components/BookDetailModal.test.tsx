@@ -47,7 +47,10 @@ vi.mock('@/hooks/useResponsiveSize', () => ({
 
 vi.mock('@/helpers/settings', () => ({ saveSysSettings: vi.fn() }));
 
-vi.mock('@/services/environment', () => ({ isWebAppPlatform: () => false }));
+vi.mock('@/services/environment', () => ({
+  isWebAppPlatform: () => false,
+  isTauriAppPlatform: () => false,
+}));
 
 vi.mock('@/libs/metadata', () => ({ searchMetadata: vi.fn(async () => []) }));
 
@@ -66,6 +69,9 @@ vi.mock('next/image', () => ({
   // biome-ignore lint/a11y/useAltText: test mock
   default: (props: Record<string, unknown>) => <img {...props} />,
 }));
+
+vi.mock('@/components/metadata/BookLibraryDetails', () => ({ default: () => null }));
+vi.mock('@/components/metadata/BookReadingStats', () => ({ default: () => null }));
 
 // Chrome we don't exercise — keep imports cheap and side-effect free.
 vi.mock('@/components/Dialog', () => ({
@@ -183,5 +189,27 @@ describe('BookDetailModal purge-on-delete routing', () => {
     fireEvent.click(screen.getByText('confirm-keep-data'));
     expect(handleBookDelete).toHaveBeenCalledTimes(1);
     expect(handleBookPurge).not.toHaveBeenCalled();
+  });
+});
+
+describe('custom metadata input drafts', () => {
+  it('lets a date be typed gradually while invalid drafts prevent saving', async () => {
+    const book = makeBook();
+    book.metadata = {
+      ...book.metadata!,
+      calibreColumns: [
+        { label: 'finished_on', name: 'Finished on', datatype: 'datetime', value: '2021-01-01' },
+      ],
+    };
+    render(
+      <BookDetailModal book={book} isOpen onClose={vi.fn()} handleBookMetadataUpdate={vi.fn()} />,
+    );
+    fireEvent.click(await screen.findByTitle('Edit Metadata'));
+    const input = await screen.findByLabelText('Finished on');
+    fireEvent.change(input, { target: { value: '202' } });
+    expect((input as HTMLInputElement).value).toBe('202');
+    expect((screen.getByText('Save') as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(input, { target: { value: '2024-02-03' } });
+    expect((screen.getByText('Save') as HTMLButtonElement).disabled).toBe(false);
   });
 });

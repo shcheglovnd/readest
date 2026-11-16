@@ -32,6 +32,8 @@ import {
   getContributorNames,
   getSeriesIndex,
 } from '@/utils/book';
+import { getBookDateRead, isAudiobook } from '@/utils/audiobook';
+import { formatDuration } from '@/utils/duration';
 import { isFeedBook } from '@/services/rss/feedBookUrl';
 import { saveSysSettings } from '@/helpers/settings';
 import BookCover from '@/components/BookCover';
@@ -43,6 +45,7 @@ interface BookDetailViewProps {
   book: Book;
   metadata: BookMetadata | null;
   fileSize: number | null;
+  readingDetails?: React.ReactNode;
   shareEnabled?: boolean;
   onEdit?: () => void;
   onDelete?: () => void;
@@ -63,6 +66,7 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
   book,
   metadata,
   fileSize,
+  readingDetails,
   shareEnabled,
   onEdit,
   onDelete,
@@ -273,7 +277,7 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
         <div className='metadata-others'>
           <button
             className={clsx(
-              'flex w-full items-center justify-between px-4 py-3 text-left transition-colors',
+              'flex w-full items-center justify-between px-4 py-3 text-start transition-colors',
               settings.metadataOthersCollapsed ? 'hover:bg-base-200 rounded-lg' : '',
             )}
             onClick={toggleOthersCollapse}
@@ -307,13 +311,13 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
                   <p className='text-neutral-content text-sm'>{formatDate(book.updatedAt) || ''}</p>
                 </div>
                 <div className='overflow-hidden pe-1 text-end sm:text-start'>
-                  <span className='font-bold'>{_('Added')}</span>
+                  <span className='font-bold'>{_('Date Added')}</span>
                   <p className='text-neutral-content text-sm'>{formatDate(book.createdAt) || ''}</p>
                 </div>
                 <div className='overflow-hidden'>
                   <span className='font-bold'>{_('Language')}</span>
                   <p className='text-neutral-content text-sm'>
-                    {formatLanguage(metadata?.language) || _('Unknown')}
+                    {formatLanguage(metadata?.language || book.primaryLanguage) || _('Unknown')}
                   </p>
                 </div>
                 <div className='overflow-hidden pe-1 text-end sm:text-start'>
@@ -334,9 +338,23 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
                   book.progress ([current, total], #5516).
                 */}
                 <div className='overflow-hidden pe-1 text-end sm:text-start'>
-                  <span className='font-bold'>{_('Pages')}</span>
+                  <span className='font-bold'>
+                    {isAudiobook(book) ? _('Audio duration') : _('Pages')}
+                  </span>
                   <p className='text-neutral-content text-sm'>
-                    {getBookPageCount(book) || _('Unknown')}
+                    {isAudiobook(book)
+                      ? book.duration || book.metadata?.absDuration || book.progress?.[1]
+                        ? formatDuration(
+                            Math.round(
+                              (book.duration ||
+                                book.metadata?.absDuration ||
+                                book.progress?.[1] ||
+                                0) / 60,
+                            ),
+                            _,
+                          )
+                        : _('Unknown')
+                      : getBookPageCount(book) || _('Unknown')}
                   </p>
                 </div>
                 <div className='col-span-2 overflow-hidden sm:col-span-1'>
@@ -345,6 +363,33 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
                     {metadata?.identifier || _('Unknown')}
                   </p>
                 </div>
+                {[
+                  [
+                    _('Date Read'),
+                    getBookDateRead(book) ? formatDate(getBookDateRead(book)) : _('Not recorded'),
+                  ],
+                  [_('Subtitle'), metadata?.subtitle],
+                  [_('Editor'), metadata?.editor],
+                  [_('ISBN'), metadata?.isbn],
+                  [_('Original filename'), book.originalFilename],
+                  [
+                    _('Other identifiers'),
+                    Array.isArray(metadata?.altIdentifier)
+                      ? metadata.altIdentifier.join(', ')
+                      : typeof metadata?.altIdentifier === 'object'
+                        ? `${metadata.altIdentifier.scheme}: ${metadata.altIdentifier.value}`
+                        : metadata?.altIdentifier,
+                  ],
+                  [_('Recorded narration'), book.hasNarration ? _('Yes') : _('No')],
+                  [_('Episodes'), book.episodeCount ?? metadata?.absEpisodeCount],
+                ]
+                  .filter(([, value]) => value !== undefined && value !== '')
+                  .map(([label, value]) => (
+                    <div key={label} className='min-w-0 break-words'>
+                      <span className='font-bold'>{label}</span>
+                      <p className='text-neutral-content text-sm'>{value}</p>
+                    </div>
+                  ))}
                 {/*
                   Calibre custom columns embedded in the OPF (#4811). Column
                   names are user content, not translation keys. The identifier
@@ -420,7 +465,7 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
         <div className='metadata-series'>
           <button
             className={clsx(
-              'flex w-full items-center justify-between px-4 py-3 text-left transition-colors',
+              'flex w-full items-center justify-between px-4 py-3 text-start transition-colors',
               settings.metadataSeriesCollapsed ? 'hover:bg-base-200 rounded-lg' : '',
             )}
             onClick={toggleSeriesCollapse}
@@ -447,6 +492,12 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
                     {getSeriesIndex(metadata?.seriesIndex) ?? _('Unknown')}
                   </p>
                 </div>
+                {metadata?.seriesTotal != null && (
+                  <div>
+                    <span className='font-bold'>{_('Total in Series')}</span>
+                    <p className='text-neutral-content text-sm'>{metadata.seriesTotal}</p>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -454,7 +505,7 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
         <div className='metadata-description'>
           <button
             className={clsx(
-              'flex w-full items-center justify-between rounded-lg px-4 py-3 text-left transition-colors',
+              'flex w-full items-center justify-between rounded-lg px-4 py-3 text-start transition-colors',
               settings.metadataDescriptionCollapsed ? 'hover:bg-base-200' : '',
             )}
             onClick={toggleDescriptionCollapse}
@@ -482,6 +533,7 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
           )}
         </div>
       </div>
+      {readingDetails}
     </div>
   );
 };

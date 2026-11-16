@@ -94,6 +94,41 @@ describe('ABSClient', () => {
     ]);
   });
 
+  it('returns complete book listening history across pages, without other books or zero-time sessions', async () => {
+    const wanted = {
+      id: 'one',
+      libraryItemId: 'a',
+      timeListening: 15,
+      startedAt: 100,
+      updatedAt: 200,
+      date: '2026-01-01',
+    };
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse(200, {
+          numPages: 2,
+          sessions: [wanted, { ...wanted, id: 'two', libraryItemId: 'b' }],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(200, {
+          numPages: 2,
+          sessions: [
+            { ...wanted, id: 'empty', timeListening: 0 },
+            { ...wanted, id: 'three', timeListening: 30 },
+          ],
+        }),
+      );
+    const read = (
+      client as ABSClient & { getBookListeningSessions?: (id: string) => Promise<unknown> }
+    ).getBookListeningSessions;
+    expect(await read?.call(client, 'a')).toEqual([
+      wanted,
+      { ...wanted, id: 'three', timeListening: 30 },
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('returns no invented dates for a user with no listening history', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse(200, { numPages: 0, sessions: [] }));
     expect(await client.getLastListenedAtByItem()).toEqual(new Map());

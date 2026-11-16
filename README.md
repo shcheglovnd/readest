@@ -8,6 +8,16 @@ over HTTPS, without uploading a second server-side copy of every book.
   sync, even when the device already has the book metadata.
 - **Stable table of contents:** virtualized TOC rows keep their data during
   expansion and PDF thumbnail reflow, avoiding stale-index reader crashes.
+- **Complete Book Details:** library status and nested group controls, missing
+  metadata and typed custom-column editing, plus per-book reading totals, pace,
+  remaining-time estimates, daily charts/calendar, and complete paginated daily,
+  page and visit histories. Audiobookshelf books also show their actual listening
+  sessions and daily listening totals. Existing metadata fields stay in one place;
+  generated dates, file properties and recorded history remain read-only.
+  Background library refreshes preserve edits and local additions made while
+  covers are downloading.
+  See [Book Details and statistics](apps/readest-app/docs/book-details.md) for
+  definitions, editing behavior and historical-data limits.
 - **Reading dates:** Audiobookshelf Date Read sorting and shelf filters use
   sessions with recorded listening time and local playback, independently of
   import and metadata sync clocks. Restored ebook reading dates also survive

@@ -293,3 +293,25 @@ describe('library reading paces', () => {
     expect((await stats.getMedianPageDurationsSecs())['percents']).toBe(50);
   });
 });
+
+describe('per-book detail events', () => {
+  it('reads only the requested book, in chronological order, without creating a record', async () => {
+    const db = await freshStatsDb();
+    const stats = StatisticsDb.from(db);
+    const a = await stats.upsertBook({ bookMd5: 'detail-a', title: 'A', authors: 'Author' });
+    const b = await stats.upsertBook({ bookMd5: 'detail-b', title: 'B', authors: 'Author' });
+    await stats.insertPageEvent(a, { page: 2, startTime: 200, duration: 45, totalPages: 100 });
+    await stats.insertPageEvent(a, { page: 1, startTime: 100, duration: 30, totalPages: 100 });
+    await stats.insertPageEvent(b, { page: 3, startTime: 300, duration: 60, totalPages: 200 });
+    // Optional until the new read-only query is implemented: old code must fail an assertion.
+    const read = (stats as StatisticsDb & { getBookEvents?: (hash: string) => Promise<unknown> })
+      .getBookEvents;
+    expect(await read?.call(stats, 'detail-a')).toEqual([
+      { bookMd5: 'detail-a', page: 1, startTime: 100, duration: 30, totalPages: 100 },
+      { bookMd5: 'detail-a', page: 2, startTime: 200, duration: 45, totalPages: 100 },
+    ]);
+    expect(await read?.call(stats, 'missing')).toEqual([]);
+    expect(await stats.getBookByMd5('missing')).toBeNull();
+    await db.close();
+  });
+});

@@ -3,6 +3,7 @@ import { isTauriAppPlatform } from '@/services/environment';
 import { runWithConcurrency } from '@/utils/concurrency';
 import { allowsSelfSignedCert, tlsFetch } from '@/utils/tls';
 import type {
+  ABSListeningSession,
   ABSLibrary,
   ABSLibraryItem,
   ABSMediaProgress,
@@ -356,6 +357,30 @@ export class ABSClient {
       page++;
     } while (page < numPages);
     return result;
+  }
+
+  /** Full per-book history for details; performs GETs only and keeps server session dates. */
+  async getBookListeningSessions(itemId: string): Promise<ABSListeningSession[]> {
+    const result = new Map<string, ABSListeningSession>();
+    let page = 0;
+    let numPages = 1;
+    do {
+      const history = await this.#request<{ numPages: number; sessions: ABSListeningSession[] }>(
+        `/api/me/listening-sessions?itemsPerPage=200&page=${page}`,
+      );
+      numPages = history.numPages;
+      for (const session of history.sessions) {
+        if (
+          session.libraryItemId !== itemId ||
+          !Number.isFinite(Number(session.timeListening)) ||
+          Number(session.timeListening) <= 0
+        )
+          continue;
+        result.set(session.id, session);
+      }
+      page++;
+    } while (page < numPages);
+    return [...result.values()];
   }
 
   async openPlaybackSession(itemId: string, episodeId?: string): Promise<ABSPlaybackSession> {

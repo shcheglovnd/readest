@@ -125,3 +125,16 @@ export interface ABSPlaybackSession {
   currentTime: number;
   audioTracks: ABSTrack[];
 }
+
+/** Recorded listening, rather than a playback position. Times are epoch milliseconds. */
+export interface ABSListeningSession {
+  id: string;
+  libraryItemId: string;
+  episodeId?: string | null;
+  date: string;
+  startedAt: number;
+  updatedAt: number;
+  timeListening: number | string;
+  startTime?: number;
+  currentTime?: number;
+}

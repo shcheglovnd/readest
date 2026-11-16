@@ -345,3 +345,35 @@ describe('BookDetailView untrusted description', () => {
     expect(description.querySelector('iframe')).toBeNull();
   });
 });
+
+describe('complete book metadata', () => {
+  it('shows Date Read separately from edit clocks and includes missing shelf metadata once', () => {
+    const book = makeBook({
+      updatedAt: Date.UTC(2026, 10, 15),
+      metadata: {
+        title: 'Book',
+        author: 'Author',
+        language: 'en',
+        subtitle: 'A subtitle',
+        editor: 'An editor',
+        isbn: '9781234567897',
+        seriesTotal: 7,
+        readestLastReadAt: Date.UTC(2021, 6, 12),
+      },
+    });
+    const view = renderView({ book, metadata: book.metadata! });
+    expect(view.getByText('Date Read')).toBeTruthy();
+    expect(view.getByText('A subtitle')).toBeTruthy();
+    expect(view.getByText('An editor')).toBeTruthy();
+    expect(view.getByText('9781234567897')).toBeTruthy();
+    expect(view.getAllByText('Language')).toHaveLength(1);
+    expect(view.getAllByText('Date Added')).toHaveLength(1);
+    expect(view.getByText('Recorded narration')).toBeTruthy();
+  });
+  it('never displays audiobook seconds as a page count', () => {
+    const book = makeBook({ format: 'ABS', progress: [3600, 7200], duration: 7200 });
+    const view = renderView({ book });
+    expect(view.queryByText('Pages')).toBeNull();
+    expect(view.getByText('Audio duration')).toBeTruthy();
+  });
+});

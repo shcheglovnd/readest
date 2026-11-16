@@ -18,6 +18,7 @@ interface BookDetailEditProps {
   book: Book;
   metadata: BookMetadata;
   tags: string[];
+  customDrafts?: Record<string, string>;
   fieldSources: Record<string, string>;
   lockedFields: Record<string, boolean>;
   fieldErrors: Record<string, string>;
@@ -38,6 +39,7 @@ const BookDetailEdit: React.FC<BookDetailEditProps> = ({
   book,
   metadata,
   tags,
+  customDrafts = {},
   fieldSources,
   lockedFields,
   fieldErrors,
@@ -145,6 +147,7 @@ const BookDetailEdit: React.FC<BookDetailEditProps> = ({
       value: metadata.isbn || '',
       placeholder: '9780123456789',
     },
+    { field: 'editor', label: _('Editor'), value: metadata.editor || '', placeholder: _('Editor') },
     {
       field: 'publisher',
       label: _('Publisher'),
@@ -371,6 +374,47 @@ const BookDetailEdit: React.FC<BookDetailEditProps> = ({
           ),
         )}
       </div>
+
+      {!!metadata.calibreColumns?.length && (
+        <fieldset className='mb-6 space-y-4'>
+          <legend className='mb-3 font-semibold'>{_('Custom library metadata')}</legend>
+          {metadata.calibreColumns.map((column) => {
+            const field = `calibre:${column.label}`;
+            return column.datatype === 'bool' ? (
+              <label key={field} className='flex items-center justify-between gap-4'>
+                <span>{column.name}</span>
+                <select
+                  aria-label={column.name}
+                  className='select eink-bordered'
+                  value={customDrafts[field] ?? String(column.value)}
+                  onChange={(e) => onFieldChange(field, e.target.value)}
+                >
+                  <option value=''>{_('Not set')}</option>
+                  <option value='false'>{_('No')}</option>
+                  <option value='true'>{_('Yes')}</option>
+                </select>
+              </label>
+            ) : (
+              <FormField
+                key={field}
+                field={field}
+                label={column.name}
+                value={
+                  customDrafts[field] ??
+                  (Array.isArray(column.value) ? column.value.join(', ') : String(column.value))
+                }
+                type={column.datatype === 'comments' ? 'textarea' : 'input'}
+                lockable={false}
+                fieldSources={fieldSources}
+                lockedFields={lockedFields}
+                fieldErrors={fieldErrors}
+                onToggleFieldLock={onToggleFieldLock}
+                onFieldChange={onFieldChange}
+              />
+            );
+          })}
+        </fieldset>
+      )}
 
       {/* Action Buttons */}
       <div className='flex flex-col items-center justify-between gap-4'>

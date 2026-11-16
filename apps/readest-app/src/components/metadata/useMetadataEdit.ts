@@ -7,6 +7,7 @@ import {
   validateISBN,
   ValidationResult,
 } from '@/utils/validation';
+import { stubTranslation as _ } from '@/utils/misc';
 import { MetadataSource } from './SourceSelector';
 import { searchMetadata } from '@/libs/metadata';
 import { formatAuthors, formatTitle, getPrimaryLanguage } from '@/utils/book';
@@ -14,6 +15,7 @@ import { formatAuthors, formatTitle, getPrimaryLanguage } from '@/utils/book';
 export const useMetadataEdit = (metadata: BookMetadata | null, tags: string[]) => {
   const [editedMeta, setEditedMeta] = useState<BookMetadata>({} as BookMetadata);
   const [editedTags, setEditedTags] = useState<string[]>(tags);
+  const [customDrafts, setCustomDrafts] = useState<Record<string, string>>({});
   const [fieldSources, setFieldSources] = useState<Record<string, string>>({});
   const [lockedFields, setLockedFields] = useState<Record<string, boolean>>({});
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -27,6 +29,7 @@ export const useMetadataEdit = (metadata: BookMetadata | null, tags: string[]) =
     'author',
     'isbn',
     'publisher',
+    'editor',
     'published',
     'language',
     'identifier',
@@ -43,6 +46,7 @@ export const useMetadataEdit = (metadata: BookMetadata | null, tags: string[]) =
   useEffect(() => {
     if (metadata) {
       setEditedMeta({ ...metadata });
+      setCustomDrafts({});
     }
   }, [metadata]);
 
@@ -61,6 +65,41 @@ export const useMetadataEdit = (metadata: BookMetadata | null, tags: string[]) =
 
   const handleFieldChange = (field: string, value: string | undefined) => {
     if (lockedFields[field]) {
+      return;
+    }
+
+    if (field.startsWith('calibre:')) {
+      const column = editedMeta.calibreColumns?.find((c) => c.label === field.slice(8));
+      if (!column) return;
+      const text = value ?? '';
+      setCustomDrafts((previous) => ({ ...previous, [field]: text }));
+      let parsed: string | number | boolean | string[] = text;
+      let error = '';
+      if (Array.isArray(column.value)) parsed = text.split(/,|;|，|、/).map((v) => v.trim());
+      else if (['int', 'float', 'rating'].includes(column.datatype) && text.trim()) {
+        parsed = Number(text);
+        if (!Number.isFinite(parsed) || (column.datatype === 'int' && !Number.isInteger(parsed)))
+          error = _('Enter a valid number');
+      } else if (column.datatype === 'bool') parsed = text === '' ? '' : text === 'true';
+      else if (
+        column.datatype === 'datetime' &&
+        text.trim() &&
+        !validateAndNormalizeDate(text).isValid
+      )
+        error = _('Enter a valid date');
+      setFieldErrors((previous) => {
+        const next = { ...previous };
+        if (error) next[field] = error;
+        else delete next[field];
+        return next;
+      });
+      if (!error)
+        setEditedMeta((previous) => ({
+          ...previous,
+          calibreColumns: previous.calibreColumns?.map((c) =>
+            c.label === column.label ? { ...c, value: parsed } : c,
+          ),
+        }));
       return;
     }
 
@@ -264,6 +303,7 @@ export const useMetadataEdit = (metadata: BookMetadata | null, tags: string[]) =
   const resetToOriginal = () => {
     if (metadata) {
       setEditedMeta({ ...metadata });
+      setCustomDrafts({});
     }
     setEditedTags([...tags]);
     setFieldSources({});
@@ -275,6 +315,7 @@ export const useMetadataEdit = (metadata: BookMetadata | null, tags: string[]) =
   return {
     editedMeta,
     editedTags,
+    customDrafts,
     fieldSources,
     lockedFields,
     fieldErrors,
